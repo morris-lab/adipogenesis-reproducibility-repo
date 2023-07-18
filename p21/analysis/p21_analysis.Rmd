@@ -1,0 +1,34 @@
+---
+title: "P21 Processed Data Analysis"
+author: "Emily Butka"
+date: "2023-07-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages}
+library(Seurat)
+```
+
+## Load processed data
+
+Data is processed in the preceeding notebook. Here, we will use the processed data for further analysis.
+
+```{r load-data}
+p21 <- readRDS("../p21_processed.rds")
+```
+
+## Prelim Plots
+
+
+
+
+
+
+
+
+
+
