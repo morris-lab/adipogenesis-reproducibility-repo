@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r load-packages}
 library(Seurat)
+library(dplyr)
 ```
 
 ## Load processed data
@@ -18,12 +19,223 @@ library(Seurat)
 Data is processed in the preceeding notebook. Here, we will use the processed data for further analysis.
 
 ```{r load-data}
-p21 <- readRDS("../p21_processed.rds")
+p21 <- readRDS("./p21_processed.rds")
+```
+
+## Color palettes
+
+```{r}
+colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", "#008DF9", "#8400CD", "#00FCCF", "#FF5AAF", "#009F81", "gray")
+```
+
+```{r}
+colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
 ```
 
 ## Prelim Plots
 
+```{r}
+p1b <- DimPlot(p21, label = T, label.size = 7, raster = F) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'))
+p1b
+```
 
+```{r}
+p1c1 <- FeaturePlot(p21, features = "Akr1c18", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c2 <- FeaturePlot(p21, features = "Smpd3", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c3 <- FeaturePlot(p21, features = "Gap43", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c4 <- FeaturePlot(p21, features = "Dpp4", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c1
+p1c2
+p1c3
+p1c4
+```
+
+```{r}
+p1c5 <- FeaturePlot(p21, features = "Mfap4", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c6 <- FeaturePlot(p21, features = "Igfbp7", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c7 <- FeaturePlot(p21, features = "Igf1", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.ticks = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c8 <- FeaturePlot(p21, features = "Cd9", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1c5
+p1c6
+p1c7
+p1c8
+```
+
+## Capybara with Merrick, et al reference
+
+### Download and process Merrick, et al dataset from GEO to recapitulate cell types as defined by authors (GEO accession GSE128889)
+
+```{r}
+subqSVF_SealeP10.data <- Read10X(data.dir = "~/Downloads/Seale data P10/")
+SVF_P10_Seale <- CreateSeuratObject(counts = subqSVF_SealeP10.data, min.cells = 3, min.features = 200, project = "Seale_P10")
+SVF_P10_Seale[["percent.mt"]] <- PercentageFeatureSet(object = SVF_P10_Seale, pattern = "^mt-")
+SVF_P10_Seale <- subset(x = SVF_P10_Seale, subset = nFeature_RNA > 200 & nFeature_RNA < 3600 & percent.mt < 7)
+SVF_P10_Seale <- NormalizeData(object = SVF_P10_Seale, normalization.method = "LogNormalize", scale.factor = 10000)
+SVF_P10_Seale <- FindVariableFeatures(object = SVF_P10_Seale, selection.method = "vst", nfeatures = 2000)
+SVF_P10_Seale <- ScaleData(object = SVF_P10_Seale, features = rownames(x = SVF_P10_Seale))
+SVF_P10_Seale <- RunPCA(object = SVF_P10_Seale, features = VariableFeatures(object = SVF_P10_Seale))
+SVF_P10_Seale <- JackStraw(object = SVF_P10_Seale, num.replicate = 100)
+SVF_P10_Seale <- ScoreJackStraw(object = SVF_P10_Seale, dims = 1:20)
+JackStrawPlot(object = SVF_P10_Seale, dims = 1:20)
+```
+
+```{r}
+ElbowPlot(object = SVF_P10_Seale)
+```
+
+```{r}
+SVF_P10_Seale <- FindNeighbors(object = SVF_P10_Seale, dims = 1:20)
+SVF_P10_Seale <- FindClusters(object = SVF_P10_Seale, resolution = 0.6)
+SVF_P10_Seale <- RunUMAP(object = SVF_P10_Seale, dims = 1:15)
+```
+
+```{r}
+# find markers for every cluster compared to all remaining cells, report only the positive ones
+SVF_P10_Seale.markers <- FindAllMarkers(object = SVF_P10_Seale, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+SVF_P10_Seale.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+```{r}
+#endo, smooth mucles and neural crest markers
+VlnPlot(object = SVF_P10_Seale, features = c("Pecam1", "Acta2", "Mpz" ), ncol = 1, stack = T, flip = T, pt.size = 3)
+```
+
+```{r}
+#Group1
+VlnPlot(object = SVF_P10_Seale, features = c("Dpp4", "Wnt2", "Akr1c18", "Anxa3", "Sema3c"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6", "13", "10"))
+```
+
+```{r}
+#Group2
+VlnPlot(object = SVF_P10_Seale, features = c("Icam1", "Dlk1", "Fabp4", "Pparg", "Ggt5", "Cd9"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6", "13", "10"))
+```
+
+```{r}
+#Group 3 CD142
+VlnPlot(object = SVF_P10_Seale, features = c("F3", "Fmo2", "Gdf10", "Ifitm1"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6"))
+```
+
+```{r}
+#adipocytes
+VlnPlot(object = SVF_P10_Seale, features = c("Adipoq", "Fabp4", "Cd36", "Plin1"), ncol = 1, stack = T, flip = T, pt.size = 3)
+```
+
+```{r}
+#group 4
+VlnPlot(object = SVF_P10_Seale, features = c("Wnt6", "Sfrp5", "Klf5", "Bace2"), ncol = 1, stack = T, flip = T, pt.size = 3)
+```
+
+```{r}
+#group 5
+VlnPlot(object = SVF_P10_Seale, features = c("Egfl6", "Emb"), ncol = 1, stack = T, flip = T, pt.size = 3)
+```
+
+```{r}
+#group 6
+VlnPlot(object = SVF_P10_Seale, features = c("Thbs4", "Plxdc1"), ncol = 1, stack = T, flip = T, pt.size = 3)
+```
+
+We have deposted our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/account/projects/173511/articles/23738658
+
+```{r}
+SVF_P10_Seale <- read.rds("~/Downloads/merrick_etal_processed.rds")
+```
+
+### Run Capybara using custom reference with cell types as defined above 
+
+Code and workflow described at https://github.com/morris-lab/Capybara.
+
+Custom code to extract hybrid IDs and mean p-values for assignments is as follows, using data frames `bin.count` and `perc.list` described in Capybara workflow:
+
+```{r}
+# hybrids
+bin.count.rowsums <- apply(bin.count, 1, sum)
+rownames(bin.count)[which(bin.count.rowsums > 1)]
+bin.count.greaterthan1 <- apply(bin.count[which(bin.count.rowsums > 1), ], c(1, 2), function(x) {x > 0})
+multi.celltypes <- apply(bin.count.greaterthan1, 1, function(x) {print(colnames(bin.count.greaterthan1)[x])})
+
+hybrids <- c()
+for(i in 1:length(multi.celltypes)) {
+  #print(multi.celltypes[i])
+  hybrids <- c(hybrids, paste(multi.celltypes[[i]], collapse = "-"))
+}
+
+hybrids <- gsub("frxn_cell.type_", "", hybrids)
+
+# p-values for classifications
+pval_avg_mat <- data.frame()
+for(i in 1:length(perc.list)) {
+  pval_avg_mat <- rbind(pval_avg_mat, apply(perc.list[[i]][[1]], 2, mean))
+  rownames(pval_avg_mat)[i] <- names(perc.list[[i]])
+}
+colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
+```
+
+Classifications, hybrids, and p-values imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, and `frxn_cell.type_xxx_merrick`, respectively.
+
+### Figures and visualizations of Capybara data
+
+```{r}
+p1dl <- DimPlot(p21, group.by = "capy_classification_merrick_etal", pt.size = 1) + scale_color_manual(labels = c("Adipocyte", "Committed preadipocyte", "Endothelial", "Group 3", "Group 4", "Group 5", "Group 6", "Interstitial progenitor", "Multi ID", "Neural crest", "Smooth muscle", "Unassigned"), values = colpal12) + theme(plot.title = element_blank(), axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), legend.position = "bottom", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.margin = margin(0, 0, 0, 0))
+p1dl + NoLegend()
+```
+
+```{r}
+refqdfi2 <- data.frame(table(c(rep("P21 Skin", dim(adi0906)[2]), rep("P12 Inguinal", dim(SVF_P10_Seale)[2])), c(adi0906$capy_classification_merrick_etal, SVF_P10_Seale$merrick_class)))
+refqdfi2$IDs_best <- refqdfi2$Var2
+```
+
+```{r}
+refqdfi2$IDs_best <- gsub("adipocyte", "Adipocyte", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("committed_preAdipocyte", "Committed preadipocyte", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("endothelial", "Endothelial", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("group_3_cd142", "Group 3 (Cd142+)", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("group_4", "Group 4 (Wnt6+)", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("group_5", "Group 5", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("group_6", "Group 6", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("interstitial_progenitor", "Interstitial progenitor", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("Multi_ID", "Multi ID", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("neural_crest", "Neural crest", refqdfi2$IDs_best)
+refqdfi2$IDs_best <- gsub("smooth_muscle", "Smooth muscle", refqdfi2$IDs_best)
+```
+
+```{r}
+p1dr <- ggplot(refqdfi2, aes(x = Var1, y = Freq, fill = IDs_best)) + geom_col(position = "fill", width = 0.9) + theme(axis.line.y = element_line(), axis.title.y = element_blank(), panel.background = element_blank(), strip.background = element_blank(), legend.position = "none", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0)) + scale_fill_manual(name = "Cell type", values = colpal12) + labs(x = "Tissue")
+p1dr
+```
 
 
 
