@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load-packages}
 library(Seurat)
 library(dplyr)
+library(reshape2)
+library(grid)
 ```
 
 ## Load processed data
@@ -94,84 +96,70 @@ p1c7
 p1c8
 ```
 
+```{r}
+s1al <- FeaturePlot(p21, features = "Fabp4")
+s1ar <- FeaturePlot(p21, features = "Pparg")
+s1al
+s1ar
+```
+
+```{r}
+s1b <- VlnPlot(p21, features = "F3", pt.size = 0) + NoLegend() + xlab("Cluster")
+s1b
+```
+
 ## Capybara with Merrick, et al reference
 
 ### Download and process Merrick, et al dataset from GEO to recapitulate cell types as defined by authors (GEO accession GSE128889)
 
 ```{r}
-subqSVF_SealeP10.data <- Read10X(data.dir = "~/Downloads/Seale data P10/")
-SVF_P10_Seale <- CreateSeuratObject(counts = subqSVF_SealeP10.data, min.cells = 3, min.features = 200, project = "Seale_P10")
-SVF_P10_Seale[["percent.mt"]] <- PercentageFeatureSet(object = SVF_P10_Seale, pattern = "^mt-")
-SVF_P10_Seale <- subset(x = SVF_P10_Seale, subset = nFeature_RNA > 200 & nFeature_RNA < 3600 & percent.mt < 7)
-SVF_P10_Seale <- NormalizeData(object = SVF_P10_Seale, normalization.method = "LogNormalize", scale.factor = 10000)
-SVF_P10_Seale <- FindVariableFeatures(object = SVF_P10_Seale, selection.method = "vst", nfeatures = 2000)
-SVF_P10_Seale <- ScaleData(object = SVF_P10_Seale, features = rownames(x = SVF_P10_Seale))
-SVF_P10_Seale <- RunPCA(object = SVF_P10_Seale, features = VariableFeatures(object = SVF_P10_Seale))
-SVF_P10_Seale <- JackStraw(object = SVF_P10_Seale, num.replicate = 100)
-SVF_P10_Seale <- ScoreJackStraw(object = SVF_P10_Seale, dims = 1:20)
-JackStrawPlot(object = SVF_P10_Seale, dims = 1:20)
+Merrick_etal.data <- Read10X(data.dir = "~/Downloads/GSE128889/")
+merrick_p12 <- CreateSeuratObject(counts = Merrick_etal.data, min.cells = 3, min.features = 200, project = "Seale_P10")
+merrick_p12[["percent.mt"]] <- PercentageFeatureSet(object = merrick_p12, pattern = "^mt-")
+merrick_p12 <- subset(x = merrick_p12, subset = nFeature_RNA > 200 & nFeature_RNA < 3600 & percent.mt < 7)
+merrick_p12 <- NormalizeData(object = merrick_p12, normalization.method = "LogNormalize", scale.factor = 10000)
+merrick_p12 <- FindVariableFeatures(object = merrick_p12, selection.method = "vst", nfeatures = 2000)
+merrick_p12 <- ScaleData(object = merrick_p12, features = rownames(x = merrick_p12))
+merrick_p12 <- RunPCA(object = merrick_p12, features = VariableFeatures(object = merrick_p12))
+merrick_p12 <- JackStraw(object = merrick_p12, num.replicate = 100)
+merrick_p12 <- ScoreJackStraw(object = merrick_p12, dims = 1:20)
+JackStrawPlot(object = merrick_p12, dims = 1:20)
 ```
 
 ```{r}
-ElbowPlot(object = SVF_P10_Seale)
+ElbowPlot(object = merrick_p12)
 ```
 
 ```{r}
-SVF_P10_Seale <- FindNeighbors(object = SVF_P10_Seale, dims = 1:20)
-SVF_P10_Seale <- FindClusters(object = SVF_P10_Seale, resolution = 0.6)
-SVF_P10_Seale <- RunUMAP(object = SVF_P10_Seale, dims = 1:15)
+merrick_p12 <- FindNeighbors(object = merrick_p12, dims = 1:20)
+merrick_p12 <- FindClusters(object = merrick_p12, resolution = 0.6)
+merrick_p12 <- RunUMAP(object = merrick_p12, dims = 1:15)
 ```
 
 ```{r}
 # find markers for every cluster compared to all remaining cells, report only the positive ones
-SVF_P10_Seale.markers <- FindAllMarkers(object = SVF_P10_Seale, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-SVF_P10_Seale.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
-```
-
-```{r}
-#endo, smooth mucles and neural crest markers
-VlnPlot(object = SVF_P10_Seale, features = c("Pecam1", "Acta2", "Mpz" ), ncol = 1, stack = T, flip = T, pt.size = 3)
-```
-
-```{r}
-#Group1
-VlnPlot(object = SVF_P10_Seale, features = c("Dpp4", "Wnt2", "Akr1c18", "Anxa3", "Sema3c"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6", "13", "10"))
-```
-
-```{r}
-#Group2
-VlnPlot(object = SVF_P10_Seale, features = c("Icam1", "Dlk1", "Fabp4", "Pparg", "Ggt5", "Cd9"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6", "13", "10"))
-```
-
-```{r}
-#Group 3 CD142
-VlnPlot(object = SVF_P10_Seale, features = c("F3", "Fmo2", "Gdf10", "Ifitm1"), ncol = 1, stack = T, flip = T, pt.size = 3, idents = c("0", "1", "2", "3", "4", "5", "6"))
-```
-
-```{r}
-#adipocytes
-VlnPlot(object = SVF_P10_Seale, features = c("Adipoq", "Fabp4", "Cd36", "Plin1"), ncol = 1, stack = T, flip = T, pt.size = 3)
-```
-
-```{r}
-#group 4
-VlnPlot(object = SVF_P10_Seale, features = c("Wnt6", "Sfrp5", "Klf5", "Bace2"), ncol = 1, stack = T, flip = T, pt.size = 3)
-```
-
-```{r}
-#group 5
-VlnPlot(object = SVF_P10_Seale, features = c("Egfl6", "Emb"), ncol = 1, stack = T, flip = T, pt.size = 3)
-```
-
-```{r}
-#group 6
-VlnPlot(object = SVF_P10_Seale, features = c("Thbs4", "Plxdc1"), ncol = 1, stack = T, flip = T, pt.size = 3)
+merrick_p12.markers <- FindAllMarkers(object = merrick_p12, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+merrick_p12.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
 ```
 
 We have deposted our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/account/projects/173511/articles/23738658
 
 ```{r}
-SVF_P10_Seale <- read.rds("~/Downloads/merrick_etal_processed.rds")
+merrick_p12 <- read.rds("~/Downloads/merrick_etal_processed.rds")
+```
+
+### Merrick et al. prelim plots
+
+```{r}
+s1c <- DimPlot(merrick_p12, label = T, label.size = 7) + NoLegend()
+s1c
+```
+
+```{r}
+s1dt <- VlnPlot(object = merrick_p12, features = c("Dpp4", "Wnt2", "Akr1c18", "Anxa3", "Sema3c", "Icam1", "Dlk1", "Fabp4", "Pparg", "Ggt5", "Cd9", "Egfl6", "Emb"), stack = T, flip = T) + NoLegend()
+s1db <- VlnPlot(object = merrick_p12, features = c("F3", "Fmo2", "Gdf10", "Ifitm1", "Thbs4", "Plxdc1", "Adipoq", "Fabp4", "Cd36", "Plin1", "Pecam1", "Acta2", "Mpz"), stack = T, flip = T) + NoLegend()
+s1dt
+s1db
 ```
 
 ### Run Capybara using custom reference with cell types as defined above 
@@ -204,7 +192,7 @@ for(i in 1:length(perc.list)) {
 colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
 ```
 
-Classifications, hybrids, and p-values imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, and `frxn_cell.type_xxx_merrick`, respectively.
+Classifications, hybrids, p-values, and identity fractions imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, `pval_cell.type_xxx_merrick`, and `frxn_cell.type_xxx_merrick`, respectively.
 
 ### Figures and visualizations of Capybara data
 
@@ -214,33 +202,481 @@ p1dl + NoLegend()
 ```
 
 ```{r}
-refqdfi2 <- data.frame(table(c(rep("P21 Skin", dim(adi0906)[2]), rep("P12 Inguinal", dim(SVF_P10_Seale)[2])), c(adi0906$capy_classification_merrick_etal, SVF_P10_Seale$merrick_class)))
-refqdfi2$IDs_best <- refqdfi2$Var2
+skin_inguinal_celltypes <- data.frame(table(c(rep("P21 Skin", dim(p21)[2]), rep("P12 Inguinal", dim(merrick_p12)[2])), c(p21$capy_classification_merrick_etal, merrick_p12$merrick_class)))
+skin_inguinal_celltypes$IDs_best <- skin_inguinal_celltypes$Var2
 ```
 
 ```{r}
-refqdfi2$IDs_best <- gsub("adipocyte", "Adipocyte", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("committed_preAdipocyte", "Committed preadipocyte", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("endothelial", "Endothelial", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("group_3_cd142", "Group 3 (Cd142+)", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("group_4", "Group 4 (Wnt6+)", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("group_5", "Group 5", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("group_6", "Group 6", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("interstitial_progenitor", "Interstitial progenitor", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("Multi_ID", "Multi ID", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("neural_crest", "Neural crest", refqdfi2$IDs_best)
-refqdfi2$IDs_best <- gsub("smooth_muscle", "Smooth muscle", refqdfi2$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("adipocyte", "Adipocyte", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("committed_preAdipocyte", "Committed preadipocyte", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("endothelial", "Endothelial", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_3_cd142", "Group 3 (Cd142+)", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_4", "Group 4 (Wnt6+)", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_5", "Group 5", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_6", "Group 6", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("interstitial_progenitor", "Interstitial progenitor", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("Multi_ID", "Multi ID", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("neural_crest", "Neural crest", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("smooth_muscle", "Smooth muscle", skin_inguinal_celltypes$IDs_best)
 ```
 
 ```{r}
-p1dr <- ggplot(refqdfi2, aes(x = Var1, y = Freq, fill = IDs_best)) + geom_col(position = "fill", width = 0.9) + theme(axis.line.y = element_line(), axis.title.y = element_blank(), panel.background = element_blank(), strip.background = element_blank(), legend.position = "none", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0)) + scale_fill_manual(name = "Cell type", values = colpal12) + labs(x = "Tissue")
+p1dr <- ggplot(skin_inguinal_celltypes, aes(x = Var1, y = Freq, fill = IDs_best)) + geom_col(position = "fill", width = 0.9) + theme(axis.line.y = element_line(), axis.title.y = element_blank(), panel.background = element_blank(), strip.background = element_blank(), legend.position = "none", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0)) + scale_fill_manual(name = "Cell type", values = colpal12) + labs(x = "Tissue")
 p1dr
 ```
 
+```{r}
+hybrid_ids <- data.frame(adipocyte = rep(0, 10), 
+                         committed_preadipocyte = rep(0, 10), 
+                         endothelial = rep(0, 10), 
+                         group_3_cd142 = rep(0, 10),
+                         group_4 = rep(0, 10),
+                         group_5 = rep(0, 10),
+                         group_6 = rep(0, 10),
+                         interstitial_progenitor = rep(0, 10),
+                         neural_crest = rep(0, 10),
+                         smooth_muscle = rep(0, 10))
+rownames(hybrid_ids) <- colnames(hybrid_ids)
+```
+
+```{r}
+hybrids_table <- data.frame(table(p21$capy_hybrid_merrick_etal))
+```
+
+```{r}
+count <- 0
+cellscount <- 0
+for(i in 1:dim(hybrids_table)[1]) {
+  types <- strsplit(as.character(hybrids_table$Var1[i]), "-")
+  if(length(types[[1]]) == 2) {
+    hybrid_ids[types[[1]][1], types[[1]][2]] <- hybrid_ids[types[[1]][1], types[[1]][2]] + hybrids_table$Freq[i]
+  }
+  else {
+    count <- count + 1
+    cellscount <- cellscount + hybrids_table$Freq[i]
+  }
+}
+print(count)
+print(cellscount)
+hybrid_ids <- reshape2::melt(hybrid_ids)
+hybrid_ids$variable2 <- rep(unique(hybrid_ids$variable), 10)
+```
+
+```{r}
+ggplot(hybrid_ids, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value / sum(hybrid_ids$value)))) + geom_point(aes(color = variable)) +
+  #scale_color_manual(values = colpal12[c(8, 4, 5, 6, 7, 2, 1)]) +
+  scale_size_area(name = "Fraction of adipocyte lineage hybrids", max_size=6) +
+  guides(fill = FALSE, color = FALSE) +
+  theme(legend.position = "bottom",
+        #text = element_text(size = 8),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        #title = element_text(size = 8),
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
 
 
+We subsetted hybrids to visualize only adipose cell type hybrids, as well as re-ordered this table for plotting:
+
+```{r}
+hybrid_ids_reordered <- read.csv("./hybrid_ids_reordered_capy_merrick_for_plotting_fig1.csv")
+
+hybrid_ids_reordered_sub <- hybrid_ids_reordered[hybrid_ids_reordered$variable %in% c("Interstitial progenitor", "Committed preadipocyte", "Group 3", "Adipocyte", "Group 5", "Group 4", "Group 6") & hybrid_ids_reordered$variable2 %in% c("Interstitial progenitor", "Committed preadipocyte", "Group 3", "Group 4", "Group 5", "Group 6"), ]
+```
+
+```{r}
+hybrid_ids_reordered_sub$variable <- gsub("Interstitial progenitor", "Interstitial\nprogenitor", hybrid_ids_reordered_sub$variable)
+hybrid_ids_reordered_sub$variable <- gsub("Committed preadipocyte", "Committed\npreadipocyte", hybrid_ids_reordered_sub$variable)
+hybrid_ids_reordered_sub$variable <- factor(hybrid_ids_reordered_sub$variable, levels = c("Interstitial\nprogenitor", "Group 3", "Group 4", "Group 5", "Group 6", "Committed\npreadipocyte", "Adipocyte"))
+hybrid_ids_reordered_sub$variable2 <- gsub("Interstitial progenitor", "Interstitial\nprogenitor", hybrid_ids_reordered_sub$variable2)
+hybrid_ids_reordered_sub$variable2 <- gsub("Committed preadipocyte", "Committed\npreadipocyte", hybrid_ids_reordered_sub$variable2)
+hybrid_ids_reordered_sub$variable2 <- factor(hybrid_ids_reordered_sub$variable2, levels = c("Interstitial\nprogenitor", "Group 3", "Group 4", "Group 5", "Group 6", "Committed\npreadipocyte", "Adipocyte"))
+```
 
 
+```{r}
+p1f <- ggplot(hybrid_ids_reordered_sub, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value / sum(hybrid_ids_reordered_sub$value)))) + geom_point(aes(color = variable)) +
+  scale_color_manual(values = colpal12[c(8, 4, 5, 6, 7, 2, 1)]) +
+  scale_size_area(name = "Fraction of adipocyte lineage hybrids", max_size=6) +
+  guides(fill = FALSE, color = FALSE) +
+  theme(legend.position = "bottom",
+        #text = element_text(size = 8),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        #title = element_text(size = 8),
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+p1f
+```
 
+```{r}
+s1i <- DimPlot(p21, cells.highlight = colnames(p21)[which(p21$capy_classification_merrick_etal == "Multi_ID")]) + NoLegend()
+s1i
+```
 
+## Integrate Merrick, et al. P12 inguinal and our P21 skin datasets, cluster, and embed in UMAP space
+
+```{r}
+anchors <- FindIntegrationAnchors(object.list = c(p21, merrick_p12), reduction = "rpca")
+```
+
+```{r}
+p21_merrick_merge <- IntegrateData(anchors)
+```
+
+```{r}
+p21_merrick_merge <- ScaleData(p21_merrick_merge, verbose = FALSE)
+p21_merrick_merge <- RunPCA(p21_merrick_merge, npcs = 30, verbose = FALSE)
+p21_merrick_merge <- RunUMAP(p21_merrick_merge, reduction = "pca", dims = 1:30)
+p21_merrick_merge <- FindNeighbors(p21_merrick_merge, reduction = "pca", dims = 1:30)
+p21_merrick_merge <- FindClusters(p21_merrick_merge, resolution = 0.5)
+```
+
+```{r}
+# Visualization
+DimPlot(p21_merrick_merge, reduction = "umap", label = TRUE, label.size = 7) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), plot.title = element_blank(), axis.line = element_blank(), axis.title = element_blank())
+```
+
+```{r}
+merge_ids_clusters <- data.frame(p21_merrick_merge@meta.data[, c('seurat_clusters', 'orig.ident', 'IDs_best')])
+merge_ids_clusters$frac_co_clust <- NA
+```
+
+```{r}
+for(i in 1:nrow(merge_ids_clusters)) {
+  merge_ids_clusters$frac_co_clust[i] <- (length(which(merge_ids_clusters$seurat_clusters == merge_ids_clusters$seurat_clusters[i] & merge_ids_clusters$IDs_best == merge_ids_clusters$IDs_best[i])) - 1) / (length(which(merge_ids_clusters$seurat_clusters == merge_ids_clusters$seurat_clusters[i])) - 1)
+}
+```
+
+```{r}
+merge_ids_clusters$IDs_best <- gsub("adipocyte", "Adipocyte", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("committed_preAdipocyte", "Committed\npreadipocyte", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("endothelial", "Endothelial", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("group_3_cd142", "Group 3", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("group_4", "Group 4", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("group_5", "Group 5", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("group_6", "Group 6", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("interstitial_progenitor", "Interstitial\nprogenitor", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("Multi_ID", "Multi ID", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("neural_crest", "Neural crest", merge_ids_clusters$IDs_best)
+merge_ids_clusters$IDs_best <- gsub("smooth_muscle", "Smooth muscle", merge_ids_clusters$IDs_best)
+```
+
+```{r}
+frac_vec <- c()
+names_vec <- c()
+for(i in names(table(merge_ids_clusters$IDs_best))) {
+  frac_vec <- c(frac_vec, mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "P21"]), mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "Seale_P10"]))
+  names_vec <- c(names_vec, rep(i, 2))
+}
+frac_df <- data.frame(cell_type = names_vec, Fraction = frac_vec, Dataset = rep(c("P21 Skin", "P12 Inguinal"), 12))
+```
+
+```{r}
+p1e <- ggplot(frac_df, aes(x = cell_type, y = Fraction, fill = Dataset)) + geom_bar(color = "black", stat = "identity", position = "dodge") + theme_classic() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1), legend.position = "none") + labs(x = "Cell type")
+p1e
+```
+
+```{r}
+pvalsdf <- data.frame("cell" = colnames(p21_merrick_merge)[p21_merrick_merge$orig.ident == "P21"], "cell_type" = na.omit(p21_merrick_merge$capy), pval = NA)
+for(i in 1:dim(pvalsdf)[1]) {
+  pvalsdf$pval[i] <- ifelse(pvalsdf$cell_type[i] == "adipocyte", p21_merrick_merge$capy_frxn_adipocyte[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                            ifelse(pvalsdf$cell_type[i] == "committed_preadipocyte", p21_merrick_merge$capy_frxn_committed_preadipocyte[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                   ifelse(pvalsdf$cell_type[i] == "endothelial", p21_merrick_merge$capy_frxn_endothelial[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                          ifelse(pvalsdf$cell_type[i] == "group_3_cd142", p21_merrick_merge$capy_frxn_group_3_cd142[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                 ifelse(pvalsdf$cell_type[i] == "group_4", p21_merrick_merge$capy_frxn_group_4[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                        ifelse(pvalsdf$cell_type[i] == "group_5", p21_merrick_merge$capy_frxn_group_5[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                               ifelse(pvalsdf$cell_type[i] == "group_6", p21_merrick_merge$capy_frxn_group_6[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                                      ifelse(pvalsdf$cell_type[i] == "interstitial_progenitor", p21_merrick_merge$capy_frxn_interstitial_progenitor[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                                             ifelse(pvalsdf$cell_type[i] == "neural_crest", p21_merrick_merge$capy_frxn_neural_crest[colnames(p21_merrick_merge) == pvalsdf$cell[i]],
+                                                                                    ifelse(pvalsdf$cell_type[i] == "smooth_muscle", p21_merrick_merge$capy_frxn_smooth_muscle[colnames(p21_merrick_merge) == pvalsdf$cell[i]], NA))))))))))
+}
+```
+
+```{r}
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r}
+identical(pvalsdf$cell, colnames(p21))
+pvalsdf$cluster <- p21$seurat_clusters
+pvalsdf$apc_type <- ifelse(pvalsdf$cluster %in% c(0, 1, 2, 4, 5, 6, 9, 10), "Progenitor", "Preadipocyte")
+```
+
+```{r}
+pvalsdf_sum <- data_summary(pvalsdf, varname="pval", 
+                    groupnames=c("cell_type", "apc_type"))
+```
+
+```{r}
+pvalsdf_sum <- na.omit(pvalsdf_sum)
+pvalsdf_sum$cell_type <- c(rep("Adipocyte", 2), rep("Committed preadipocyte", 2), "Endothelial", rep("Group 3", 2), "Group 4", rep("Group 5", 2), rep("Group 6", 2), rep("Interstitial progenitor", 2), rep("Neural crest", 2), "Smooth muscle")
+```
+
+```{r}
+pvalsdf_sum2 <- rbind(pvalsdf_sum, c("Endothelial", "Progenitor", 0.0, 0.0))
+pvalsdf_sum2 <- rbind(pvalsdf_sum2, c("Group 4", "Progenitor", 0.0, 0.0))
+pvalsdf_sum2 <- rbind(pvalsdf_sum2, c("Smooth muscle", "Progenitor", 0.0, 0.0))
+```
+
+```{r}
+pvalsdf_sum2$cell_type <- gsub("Committed preadipocyte", "Committed\npreadipocyte", pvalsdf_sum2$cell_type)
+pvalsdf_sum2$cell_type <- gsub("Interstitial progenitor", "Interstitial\nprogenitor", pvalsdf_sum2$cell_type)
+```
+
+```{r}
+pvalsdf_sum2$pval <- as.double(pvalsdf_sum2$pval)
+pvalsdf_sum2$sd <- as.double(pvalsdf_sum2$sd)
+```
+
+```{r}
+s1e <- ggplot(pvalsdf_sum2, aes(x=cell_type, y=pval, fill = apc_type)) + 
+  geom_bar(stat="identity", color="black", 
+           position=position_dodge()) +
+  geom_errorbar(aes(ymin=ifelse(pval == 0, 0, pval-sd), ymax=ifelse(pval == 0, 0, pval+sd)), width=.2,
+                 position=position_dodge(.9)) + theme_classic() + geom_hline(yintercept = 0.05, color = "black", linetype = "dashed") + 
+  #ggtitle("Mean p-value of ID likelihood for POSITIVELY ID'd cells") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "bottom") + labs(x = "Cell type", y = "p-value", fill = "APC Type")
+s1e
+```
+
+```{r}
+s1g <- DimPlot(p21_merrick_merge, reduction = "umap", label = TRUE, label.size = 7) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), plot.title = element_blank(), axis.line = element_blank(), axis.title = element_blank())
+s1g
+```
+
+```{r}
+merge_ids_clusters_3 <- data.frame(p21_merrick_merge@meta.data[, c('seurat_clusters', 'orig.ident', 'IDs_best')])
+merge_ids_clusters_3 <- table(merge_ids_clusters_3$orig.ident, merge_ids_clusters_3$IDs_best, merge_ids_clusters_3$seurat_clusters)
+IDs_seq <- c()
+for(i in 1:length(unique(p21_merrick_merge$IDs_best))) {
+  IDs_seq <- c(IDs_seq, rep(unique(p21_merrick_merge$IDs_best)[i], 17))
+}
+merge_ids_clusters_2 <- data.frame("id" = c(rep("P21", 204), rep("Seale_P10", 204)), "IDs_best" = rep(IDs_seq, 2), "seurat_clusters" = rep(seq(0, 16), 4))
+```
+
+```{r}
+merge_ids_clusters_2$value <- NA
+for(i in 1:dim(merge_ids_clusters_2)[1]) {
+  merge_ids_clusters_2$value[i] <- length(which(p21_merrick_merge$seurat_clusters == merge_ids_clusters_2$seurat_clusters[i] & p21_merrick_merge$IDs_best == merge_ids_clusters_2$IDs_best[i] & p21_merrick_merge$orig.ident == merge_ids_clusters_2$id[i]))
+}
+```
+
+```{r}
+merge_ids_clusters_2$IDs_best <- gsub("adipocyte", "Adipocyte", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("committed_preAdipocyte", "Committed preadipocyte", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("endothelial", "Endothelial", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("group_3_cd142", "Group 3 (Cd142+)", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("group_4", "Group 4 (Wnt6+)", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("group_5", "Group 5", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("group_6", "Group 6", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("interstitial_progenitor", "Interstitial progenitor", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("Multi_ID", "Multi ID", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("neural_crest", "Neural crest", merge_ids_clusters_2$IDs_best)
+merge_ids_clusters_2$IDs_best <- gsub("smooth_muscle", "Smooth muscle", merge_ids_clusters_2$IDs_best)
+```
+
+```{r}
+p1 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 0 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p2 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 1 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p3 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 2 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p4 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 3 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p5 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 4 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p6 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 5 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p7 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 6 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p8 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 7 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p9 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 8 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p10 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 9 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p11 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 10 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p12 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 11 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p13 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 12 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p14 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 13 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p15 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 14 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p16 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 15 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+p17 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 16 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q1 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 0 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q2 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 1 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q3 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 2 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q4 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 3 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q5 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 4 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q6 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 5 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q7 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 6 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q8 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 7 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q9 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 8 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q10 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 9 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q11 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 10 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q12 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 11 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q13 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 12 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q14 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 13 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q15 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 14 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q16 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 15 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q17 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 16 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+```
+
+```{r}
+t1 <- textGrob("0", gp=gpar(fontfamily="Helvetica"))
+t2 <- textGrob("1", gp=gpar(fontfamily="Helvetica"))
+t3 <- textGrob("2", gp=gpar(fontfamily="Helvetica"))
+t4 <- textGrob("3", gp=gpar(fontfamily="Helvetica"))
+t5 <- textGrob("4", gp=gpar(fontfamily="Helvetica"))
+t6 <- textGrob("5", gp=gpar(fontfamily="Helvetica"))
+t7 <- textGrob("6", gp=gpar(fontfamily="Helvetica"))
+t8 <- textGrob("7", gp=gpar(fontfamily="Helvetica"))
+t9 <- textGrob("8", gp=gpar(fontfamily="Helvetica"))
+t10 <- textGrob("9", gp=gpar(fontfamily="Helvetica"))
+t11 <- textGrob("10", gp=gpar(fontfamily="Helvetica"))
+t12 <- textGrob("11", gp=gpar(fontfamily="Helvetica"))
+t13 <- textGrob("12", gp=gpar(fontfamily="Helvetica"))
+t14 <- textGrob("13", gp=gpar(fontfamily="Helvetica"))
+t15 <- textGrob("14", gp=gpar(fontfamily="Helvetica"))
+t16 <- textGrob("15", gp=gpar(fontfamily="Helvetica"))
+t17 <- textGrob("16", gp=gpar(fontfamily="Helvetica"))
+```
+
+```{r}
+s1h <- grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, ncol=17)
+s1h
+```
+
+## Subset and re-cluster preadipocytes
+
+```{r}
+p21$apc_type <- "prog"
+p21$apc_type[p21$seurat_clusters %in% c(3,  7, 8, 11)] <- "preadip"
+```
+
+```{r}
+preadips <- subset(p21, idents = c(3, 7, 8, 11))
+```
+
+```{r}
+dim(preadips)
+table(preadips$capy)
+table(preadips$seurat_clusters)
+```
+
+```{r}
+preadips$clusters_old <- preadips$seurat_clusters
+```
+
+```{r}
+preadips <- FindNeighbors(preadips)
+preadips <- FindClusters(preadips)
+preadips <- RunUMAP(preadips, dims = 1:10)
+```
+
+We have deposted our subclustered preadipocyte data here, for downstream analysis: 
+https://figshare.com/s/990796a56c7df7fd2c38
+
+```{r}
+s1f <- DimPlot(preadips, group.by = "capy_classification_merrick_etal", cols = colpal12, pt.size = 0.8) + theme(plot.title = element_blank()) #+ NoLegend()
+s1f
+```
+
+## New classification
+
+```{r}
+p21$new_classification <- NA
+p21$new_classification[p21$seurat_clusters %in% c(0, 1, 2, 4, 5, 6, 10)] <- "Interstitial progenitor"
+p21$new_classification[p21$seurat_clusters == 7] <- "Committed preadipocyte"
+p21$new_classification[p21$seurat_clusters %in% c(3, 7, 8, 11) & p21$capy_classification_merrick_etal == "interstitial_progenitor"] <- "Transitioning interstitial progenitor"
+p21$new_classification[colnames(preadips)[preadips$seurat_clusters %in% c(0, 1, 7, 8)]] <- "Immature preadipocyte"
+```
+
+```{r}
+p21$new_classification_short <- gsub("Interstitial progenitor", "Int prog", p21$new_classification)
+p21$new_classification_short <- gsub("Transitioning interstitial progenitor", "Trans int prog", p21$new_classification_short)
+p21$new_classification_short <- gsub("Immature preadipocyte", "Imm preadip", p21$new_classification_short)
+p21$new_classification_short <- gsub("Committed preadipocyte", "Comm preadip", p21$new_classification_short)
+p21$new_classification <- factor(p21$new_classification, levels = c("Interstitial progenitor", "Transitioning interstitial progenitor", "Immature preadipocyte", "Committed preadipocyte"))
+p21$new_classification_short <- factor(p21$new_classification_short, levels = c("Int prog", "Trans int prog", "Imm preadip", "Comm preadip"))
+```
+
+```{r}
+p1g <- DimPlot(p21, group.by = "new_classification", cols = colpal6[1:4]) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank(), legend.position = "none")
+p1g
+```
+
+```{r}
+p1hl <- VlnPlot(p21[, !is.na(p21$new_classification_short)], features = "Dpp4", group.by = "new_classification_short", pt.size = 0, cols = colpal6[1:4]) + stat_summary(fun = mean, geom='point', size = 3, colour = "black") 
+p1hr <- VlnPlot(p21[, !is.na(p21$new_classification_short)], features = "Cd9", group.by = "new_classification_short", pt.size = 0, cols = colpal6[1:4]) + stat_summary(fun = mean, geom='point', size = 3, colour = "black") 
+p1hl + p1hr
+```
+
+```{r}
+p1h <- grid.arrange(p1hl + NoLegend(), p1hr + NoLegend(), nrow = 1) # heights = unit(c(2, 1), c("in", "in")), 
+p1h
+```
+
+```{r}
+frxns_p21 <- p21@meta.data[, grep('frxn', colnames(p21@meta.data))]
+```
+
+```{r}
+frxns_p21$cell_name <- rownames(p21@meta.data)
+rownames(frxns_p21) <- frxns_p21$cell_name
+frxns_p21$call <- p21$capy_classification_merrick_etal
+frxns_p21 <- reshape2::melt(frxns_p21)
+table(frxns_p21$value < 0)
+frxns_p21$value[frxns_p21$value < 0] <- 0
+```
+
+```{r}
+frxns_p21$value_norm <- apply(frxns_p21, 1, function(x) { as.double(x[4]) / sum(frxns_p21$value[frxns_p21$cell_name == x[1]]) })
+order_new <- frxns_p21$cell_name[order(frxns_p21[frxns_p21$variable == "frxn_cell.type_interstitial_progenitor_merrick", "value_norm"], decreasing = T)]
+frxns_p21$variable <- factor(frxns_p21$variable)
+frxns_p21$cell_name <- factor(frxns_p21$cell_name, levels = order_new)
+
+```
+
+```{r}
+s1jt <- ggplot(frxns_p21, aes(x = cell_name, y = value_norm, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = colpal12) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank()) + labs(y = "Fractional cell type composition")
+s1jt
+```
+
+```{r}
+s1jm <- ggplot(frxns_p21, aes(x = cell_name, fill = call)) + geom_bar() + scale_fill_manual(values = colpal12) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank())
+s1jm
+```
+
+```{r}
+p21_new_class_order_new <- data.frame(cell_name = colnames(p21), new_call = p21$new_classification)
+p21_new_class_order_new$cell_name <- factor(p21_new_class_order_new$cell_name, levels = order_new)
+```
+
+```{r}
+s1jb <- ggplot(p21_new_class_order_new, aes(x = cell_name, fill = new_call)) + geom_bar() + scale_fill_manual(values = colpal6) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank())
+s1jb
+```
+
+```{r}
+s1j <- grid.arrange(s1jt, s1jm, s1jb, nrow = 3, heights = unit(c(2, 0.5, 0.5), c("in", "in", "in")))
+s1j
+```
+
+We have deposted our whole processed P21 dataset here: 
+https://figshare.com/s/396c5f4ebd3c23d20094
 
