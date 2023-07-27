@@ -18,10 +18,10 @@ library(grid)
 
 ## Load processed data
 
-Data is processed in the preceeding notebook. Here, we will use the processed data for further analysis.
+Ras data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
 
 ```{r load-data}
-p21 <- readRDS("./p21_processed.rds")
+p21 <- readRDS("~/Downloads/p21_processed.rds")
 ```
 
 ## Color palettes
@@ -142,7 +142,7 @@ merrick_p12.markers <- FindAllMarkers(object = merrick_p12, only.pos = TRUE, min
 merrick_p12.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
 ```
 
-We have deposted our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/account/projects/173511/articles/23738658
+We have deposited our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/account/projects/173511/articles/23738658
 
 ```{r}
 merrick_p12 <- read.rds("~/Downloads/merrick_etal_processed.rds")
@@ -192,7 +192,7 @@ for(i in 1:length(perc.list)) {
 colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
 ```
 
-Classifications, hybrids, p-values, and identity fractions imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, `pval_cell.type_xxx_merrick`, and `frxn_cell.type_xxx_merrick`, respectively.
+Classifications, hybrids, p-values, and identity fractions imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, `pval_cell.type_xxx_merrick`, and `frxn_cell.type_xxx_merrick`, respectively. This information is stored in `p21_processed.rds` on Figshare.
 
 ### Figures and visualizations of Capybara data
 
@@ -283,7 +283,7 @@ ggplot(hybrid_ids, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value
 ```
 
 
-We subsetted hybrids to visualize only adipose cell type hybrids, as well as re-ordered this table for plotting:
+We subsetted hybrids to visualize only adipose cell type hybrids, as well as re-ordered this table for plotting. This file can be found on GitHub:
 
 ```{r}
 hybrid_ids_reordered <- read.csv("./hybrid_ids_reordered_capy_merrick_for_plotting_fig1.csv")
@@ -677,6 +677,6 @@ s1j <- grid.arrange(s1jt, s1jm, s1jb, nrow = 3, heights = unit(c(2, 0.5, 0.5), c
 s1j
 ```
 
-We have deposted our whole processed P21 dataset here: 
+Again, we have deposited our whole processed P21 dataset on Figshare. It has been analyzed according to the code in this notebook: 
 https://figshare.com/s/396c5f4ebd3c23d20094
 
