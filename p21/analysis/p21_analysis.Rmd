@@ -14,11 +14,14 @@ library(Seurat)
 library(dplyr)
 library(reshape2)
 library(grid)
+library(ggplot2)
 ```
+
+This notebook contains code used to analyze P21 data following alignment and quality control. Code for all panels from Figure 1 and Supplementary Figure 1 is outlined here.
 
 ## Load processed data
 
-Ras data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
+Raw data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
 
 ```{r load-data}
 p21 <- readRDS("~/Downloads/p21_processed.rds")
@@ -34,7 +37,7 @@ colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", 
 colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
 ```
 
-## Prelim Plots
+## Preliminary Plots
 
 ```{r}
 p1b <- DimPlot(p21, label = T, label.size = 7, raster = F) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'))
@@ -164,7 +167,7 @@ s1db
 
 ### Run Capybara using custom reference with cell types as defined above 
 
-Code and workflow described at https://github.com/morris-lab/Capybara.
+Code and workflow described at https://github.com/morris-lab/Capybara. We did not perform tissue-level classification (Step 1); rather, a high-resolution custom reference was generated and continuous identity measured (Step 2) followed by discrete cell type classification and multiple identity scoring (Step 3).
 
 Custom code to extract hybrid IDs and mean p-values for assignments is as follows, using data frames `bin.count` and `perc.list` described in Capybara workflow:
 
@@ -561,7 +564,7 @@ s1h <- grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14,
 s1h
 ```
 
-## Subset and re-cluster preadipocytes
+## Subset and re-cluster P21 preadipocytes
 
 ```{r}
 p21$apc_type <- "prog"
@@ -596,7 +599,7 @@ s1f <- DimPlot(preadips, group.by = "capy_classification_merrick_etal", cols = c
 s1f
 ```
 
-## New classification
+## New proposed classification strategy and visualization
 
 ```{r}
 p21$new_classification <- NA
