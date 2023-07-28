@@ -145,7 +145,7 @@ merrick_p12.markers <- FindAllMarkers(object = merrick_p12, only.pos = TRUE, min
 merrick_p12.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
 ```
 
-We have deposited our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/account/projects/173511/articles/23738658
+We have deposited our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/s/224f9152394137f8c46d
 
 ```{r}
 merrick_p12 <- read.rds("~/Downloads/merrick_etal_processed.rds")
