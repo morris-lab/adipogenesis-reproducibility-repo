@@ -113,11 +113,11 @@ s1b
 
 ## Capybara with Merrick, et al reference
 
-### Download and process Merrick, et al dataset from GEO to recapitulate cell types as defined by authors (GEO accession GSE128889)
+### Download and process Merrick, et al dataset from GEO to recapitulate cell types as defined by authors (GEO accession GSE128889; GSM3717977)
 
 ```{r}
-Merrick_etal.data <- Read10X(data.dir = "~/Downloads/GSE128889/")
-merrick_p12 <- CreateSeuratObject(counts = Merrick_etal.data, min.cells = 3, min.features = 200, project = "Seale_P10")
+Merrick_etal.data <- Read10X(data.dir = "~/Downloads/GSE128889/GSM3717977/") # this directory to contain 3 files: GSM3717977_SCmurinep12_barcodes.tsv.gz, GSM3717977_SCmurinep12_genes.tsv.gz, GSM3717977_SCmurinep12_matrix.mtx.gz
+merrick_p12 <- CreateSeuratObject(counts = Merrick_etal.data, min.cells = 3, min.features = 200, project = "Seale_P12")
 merrick_p12[["percent.mt"]] <- PercentageFeatureSet(object = merrick_p12, pattern = "^mt-")
 merrick_p12 <- subset(x = merrick_p12, subset = nFeature_RNA > 200 & nFeature_RNA < 3600 & percent.mt < 7)
 merrick_p12 <- NormalizeData(object = merrick_p12, normalization.method = "LogNormalize", scale.factor = 10000)
@@ -382,7 +382,7 @@ merge_ids_clusters$IDs_best <- gsub("smooth_muscle", "Smooth muscle", merge_ids_
 frac_vec <- c()
 names_vec <- c()
 for(i in names(table(merge_ids_clusters$IDs_best))) {
-  frac_vec <- c(frac_vec, mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "P21"]), mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "Seale_P10"]))
+  frac_vec <- c(frac_vec, mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "P21"]), mean(merge_ids_clusters$frac_co_clust[merge_ids_clusters$IDs_best == i & merge_ids_clusters$orig.ident == "Seale_P12"]))
   names_vec <- c(names_vec, rep(i, 2))
 }
 frac_df <- data.frame(cell_type = names_vec, Fraction = frac_vec, Dataset = rep(c("P21 Skin", "P12 Inguinal"), 12))
@@ -478,7 +478,7 @@ IDs_seq <- c()
 for(i in 1:length(unique(p21_merrick_merge$IDs_best))) {
   IDs_seq <- c(IDs_seq, rep(unique(p21_merrick_merge$IDs_best)[i], 17))
 }
-merge_ids_clusters_2 <- data.frame("id" = c(rep("P21", 204), rep("Seale_P10", 204)), "IDs_best" = rep(IDs_seq, 2), "seurat_clusters" = rep(seq(0, 16), 4))
+merge_ids_clusters_2 <- data.frame("id" = c(rep("P21", 204), rep("Seale_P12", 204)), "IDs_best" = rep(IDs_seq, 2), "seurat_clusters" = rep(seq(0, 16), 4))
 ```
 
 ```{r}
@@ -520,23 +520,23 @@ p14 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters ==
 p15 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 14 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
 p16 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 15 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
 p17 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 16 & merge_ids_clusters_2$id == "P21"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q1 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 0 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q2 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 1 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q3 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 2 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q4 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 3 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q5 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 4 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q6 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 5 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q7 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 6 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q8 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 7 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q9 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 8 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q10 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 9 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q11 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 10 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q12 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 11 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q13 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 12 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q14 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 13 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q15 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 14 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q16 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 15 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
-q17 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 16 & merge_ids_clusters_2$id == "Seale_P10"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q1 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 0 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q2 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 1 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q3 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 2 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q4 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 3 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q5 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 4 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q6 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 5 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q7 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 6 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q8 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 7 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q9 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 8 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q10 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 9 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q11 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 10 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q12 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 11 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q13 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 12 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q14 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 13 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q15 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 14 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q16 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 15 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
+q17 <- ggplot(merge_ids_clusters_2[which(merge_ids_clusters_2$seurat_clusters == 16 & merge_ids_clusters_2$id == "Seale_P12"), ], aes(x="", y=value, fill=IDs_best)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal12)
 ```
 
 ```{r}
