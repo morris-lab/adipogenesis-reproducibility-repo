@@ -148,7 +148,7 @@ merrick_p12.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
 We have deposited our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/s/224f9152394137f8c46d
 
 ```{r}
-merrick_p12 <- read.rds("~/Downloads/merrick_etal_processed.rds")
+merrick_p12 <- readRDS("~/Downloads/merrick_etal_processed.rds")
 ```
 
 ### Merrick et al. prelim plots

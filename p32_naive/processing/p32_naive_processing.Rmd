@@ -1,0 +1,28 @@
+---
+title: "P32 Naive Raw Data Processing"
+author: "Emily Butka"
+date: "2023-08-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## CellTag pipeline
+
+Code and workflow described at https://github.com/morris-lab/newCloneCalling. CellTag versions were deconvolved as described below and population metadata was imported to P32 naive Seurat object as `cellTag`. This information is stored in `p32_naive_processed.rds` on Figshare.
+
+| CellTag version | Population labeled | Motif |
+|-----------------|--------------------|-------|
+| 8N-v1 | Cd9+ APCs (preadipocytes) | 'GGT[ACTG]{8}GAATTC' |
+| 8N-v2 | Dpp4+ APCs (progenitors) | 'GTGATG[ACTG]{8}GAATTC' |
+
+## Integration of four biological replicates
+
+Biological replicates were prepared in pairs, but all four replicates were executed identically. This eliminates the need to correct for batch effects. Raw data for pairs of replicates were merged, and filtering, normalizing, and scaling were subsequently performed on the merged object. Raw data can be found on GEO.
+
+
+
+
+
