@@ -150,6 +150,176 @@ p2e <- p2el + p2er
 
 ### Host vs. transplant
 
+```{r}
+# Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
+adi_merged$celltag_origin <- adi_merged$celltag
+adi_merged$celltag_origin[which(adi_merged@assays$RNA@counts["GFP.CDS", ] == 0 & adi_merged$celltag == "none")] <- "None-Host"
+adi_merged$celltag_origin[which(adi_merged@assays$RNA@counts["GFP.CDS", ] > 0 & adi_merged$celltag == "none")] <- "None-Transplant"
+```
+
+#### Remove transplant cells and compare clusters
+
+```{r}
+#adi_merged <- FindNeighbors(adi_merged, return.neighbor = T)
+```
+
+```{r}
+DefaultAssay(adi_merged) <- "integrated"
+```
+
+```{r}
+adi_merged_sub <- adi_merged[, which(adi_merged$celltag_origin == "None-Host")]
+```
+
+```{r}
+adi_merged_sub <- ScaleData(adi_merged_sub)
+adi_merged_sub <- FindVariableFeatures(adi_merged_sub)
+adi_merged_sub <- RunPCA(adi_merged_sub)
+adi_merged_sub <- RunUMAP(adi_merged_sub, dims = 1:10)
+adi_merged_sub <- FindNeighbors(adi_merged_sub)
+adi_merged_sub <- FindClusters(adi_merged_sub)
+adi_merged_sub <- FindNeighbors(adi_merged_sub, return.neighbor = T)
+```
+
+```{r}
+DimPlot(adi_merged_sub, label = TRUE, label.size = 7) + NoLegend()
+```
+
+```{r}
+nndistdf <- data.frame(adi_merged_sub2@neighbors$integrated.nn@nn.dist, row.names = adi_merged_sub2@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+nndistdf_mean <- apply(nndistdf, 1, mean)
+```
+
+#### Now find distances and calculate mean for reclustered host data with same cells
+
+
+```{r}
+nncells_orig <- data.frame(adi_merged_sub2@neighbors$integrated.nn@nn.idx, row.names = adi_merged_sub2@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+umap_new <- adi_merged_sub@reductions$umap@cell.embeddings
+```
+
+```{r}
+euclidean <- function(a, b) sqrt(sum((a - b)^2))
+```
+
+```{r}
+euclidean(umap_new[rownames(nncells_orig)[1], ], umap_new[nncells_orig[1, 2], ])
+```
+
+```{r}
+nndistdf2 <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_orig)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_orig)[j], ], umap_new[nncells_orig[j, i], ]))
+  }
+  #print(row)
+  nndistdf2 <- rbind(nndistdf2, row)
+}
+```
+
+```{r}
+nndistdf2_mean <- apply(nndistdf2, 1, mean)
+```
+
+```{r}
+nncells_random <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- sample.int(dim(nncells_orig)[1], 20, replace = FALSE)
+  nncells_random <- rbind(nncells_random, row)
+}
+rownames(nncells_random) <- adi_merged_sub2@neighbors$integrated.nn@cell.names
+```
+
+```{r}
+nndistdf_random <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_random)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_random)[j], ], umap_new[nncells_random[j, i], ]))
+  }
+  #print(row)
+  nndistdf_random <- rbind(nndistdf_random, row)
+}
+```
+
+```{r}
+nndistdf_random_mean <- apply(nndistdf_random, 1, mean)
+```
+
+```{r}
+dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1])),
+                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf_random_mean))
+```
+
+```{r}
+dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Random"))
+```
+
+```{r}
+nncells_random_in_clust <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  clust <- adi_merged_sub$seurat_clusters[rownames(nncells_orig)[j]]
+  cells_in_clust <- c(1:dim(nncells_orig)[1])[which(adi_merged_sub$seurat_clusters == clust)]
+  row <- cells_in_clust[sample.int(length(cells_in_clust), 20, replace = FALSE)]
+  nncells_random_in_clust <- rbind(nncells_random_in_clust, row)
+}
+rownames(nncells_random_in_clust) <- adi_merged_sub2@neighbors$integrated.nn@cell.names
+```
+
+```{r}
+nndistdf_random_in_clust <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_random_in_clust)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_random_in_clust)[j], ], umap_new[nncells_random_in_clust[j, i], ]))
+  }
+  #print(row)
+  nndistdf_random_in_clust <- rbind(nndistdf_random_in_clust, row)
+}
+```
+
+```{r}
+nndistdf_random_in_clust_mean <- apply(nndistdf_random_in_clust, 1, mean)
+```
+
+```{r}
+dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1]), rep("Random_in_clust", dim(nncells_orig)[1])),
+                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf_random_mean, nndistdf_random_in_clust_mean))
+```
+
+```{r}
+dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Random", "Random_in_clust"))
+```
+
+```{r}
+nndistdf2_own <- data.frame(adi_merged_sub@neighbors$integrated.nn@nn.dist, row.names = adi_merged_sub@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+nndistdf2_own_mean <- apply(nndistdf2_own, 1, mean)
+```
+
+```{r}
+dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Reclustered_own_20nn", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1]), rep("Random_in_clust", dim(nncells_orig)[1])),
+                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf2_own_mean, nndistdf_random_mean, nndistdf_random_in_clust_mean))
+```
+
+```{r}
+dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Reclustered_own_20nn", "Random", "Random_in_clust"))
+```
+
+```{r}
+s5c <- ggplot(dists, aes(x = gsub("_", " ", embedding), y = distance)) + geom_boxplot() + theme_classic() + labs(x = "Embedding", y = "Distance")
+s5c
+```
+
 ### Biological replicate
 
 ## Jaccard analysis associating cell type and louvain cluster

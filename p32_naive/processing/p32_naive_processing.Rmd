@@ -22,6 +22,694 @@ Code and workflow described at https://github.com/morris-lab/newCloneCalling. Ce
 
 Biological replicates were prepared in pairs, but all four replicates were executed identically. This eliminates the need to correct for batch effects. Raw data for pairs of replicates were merged, and filtering, normalizing, and scaling were subsequently performed on the merged object. Raw data can be found on GEO.
 
+## Load 2020 data
+
+```{r eval = FALSE}
+adi0722.counts <- Read10X("~/OneDrive/MorrisLab/Guillermo_project/2020_07_22/2020_07_22_filtered_feature_bc_matrix/")
+```
+
+```{r eval = FALSE}
+adi1104.counts <- Read10X("~/OneDrive/MorrisLab/Guillermo_project/2020_11_04/2020_11_04_filtered_feature_bc_matrix/")
+```
+
+## Load 2021 data
+
+```{r eval = FALSE}
+adi0706.counts <- Read10X("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/Jul_6/jul6_filtered_feature_bc_matrix/")
+```
+
+```{r eval = FALSE}
+adi0708.counts <- Read10X("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/Jul_8/jul8_filtered_feature_bc_matrix/")
+```
+
+## Preprocess
+
+```{r eval = FALSE}
+adi0722 <- CreateSeuratObject(adi0722.counts)
+adi1104 <- CreateSeuratObject(adi1104.counts)
+adi0706 <- CreateSeuratObject(adi0706.counts)
+adi0708 <- CreateSeuratObject(adi0708.counts)
+```
+
+## Import all celltags
+
+```{r eval = FALSE}
+adi0722_for_celltags <- readRDS("~/Desktop/MorrisLab/Guillermo_project/2020_07_22/2020_07_22_adi_filtered_metadata.rds")
+adi1104_for_celltags <- readRDS("~/Desktop/MorrisLab/Guillermo_project/2020_11_04/adi_seurat.rds")
+adi0722_for_celltags <- UpdateSeuratObject(adi0722_for_celltags)
+```
+
+```{r eval = FALSE}
+adi0722 <- subset(adi0722, cells = colnames(adi0722_for_celltags))
+identical(colnames(adi0722), colnames(adi0722_for_celltags))
+adi0722@meta.data$celltag <- adi0722_for_celltags@meta.data$celltag_v1v2_filtered
+```
+
+```{r eval = FALSE}
+adi1104 <- subset(adi1104, cells = colnames(adi1104_for_celltags))
+identical(colnames(adi1104), colnames(adi1104_for_celltags))
+adi1104@meta.data$celltag <- adi1104_for_celltags@meta.data$celltag_v1v2_filtered
+```
+
+```{r eval = FALSE}
+jul6v1cells <- read.csv("Jul_6/proc_files/jul6v1_allow_cells.txt", header = F)$V1
+jul6v2cells <- read.csv("Jul_6/proc_files/jul6v2_allow_cells.txt", header = F)$V1
+jul8v1cells <- read.csv("Jul_8/proc_files/jul8v1_allow_cells.txt", header = F)$V1
+jul8v2cells <- read.csv("Jul_8/proc_files/jul8v2_allow_cells.txt", header = F)$V1
+```
+
+```{r eval = FALSE}
+celltag6 <- rep("none", dim(adi0706)[2])
+celltag8 <- rep("none", dim(adi0708)[2])
+
+for(i in 1:length(celltag6)) {
+  if(colnames(adi0706)[i] %in% jul6v1cells) {
+    celltag6[i] <- "v1"
+  }
+  if(colnames(adi0706)[i] %in% jul6v2cells) {
+    celltag6[i] <- "v2"
+  }
+}
+
+for(i in 1:length(celltag8)) {
+  if(colnames(adi0708)[i] %in% jul8v1cells) {
+    celltag8[i] <- "v1"
+  }
+  if(colnames(adi0708)[i] %in% jul8v2cells) {
+    celltag8[i] <- "v2"
+  }
+}
+
+adi0706@meta.data$celltag <- celltag6
+adi0708@meta.data$celltag <- celltag8
+```
+
+```{r echo = FALSE}
+#saveRDS(adi0722, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0722.rds")
+#saveRDS(adi1104, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi1104.rds")
+#saveRDS(adi0706, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0706.rds")
+#saveRDS(adi0708, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0708.rds")
+adi0722 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0722.rds")
+adi1104 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi1104.rds")
+adi0706 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0706.rds")
+adi0706 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0706.rds")
+adi0708 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi0708.rds")
+```
+
+
+```{r eval = FALSE}
+adi0722 <- NormalizeData(adi0722)
+adi0722 <- FindVariableFeatures(adi0722)
+adi0722[["percent.mt"]] <- PercentageFeatureSet(adi0722, pattern = "^mt-")
+```
+
+```{r}
+VlnPlot(adi0722, c("nFeature_RNA", "percent.mt"))
+```
+
+```{r eval = FALSE}
+adi0722 <- ScaleData(adi0722)
+adi0722 <- subset(adi0722, subset = percent.mt < 5)
+adi0722 <- RunPCA(adi0722, features = VariableFeatures(adi0722), nfeatures.print = 10)
+adi0722 <- FindNeighbors(adi0722)
+adi0722 <- FindClusters(adi0722)
+adi0722 <- RunUMAP(adi0722, dims = 1:10)
+```
+
+```{r eval = FALSE}
+adi1104 <- NormalizeData(adi1104)
+adi1104 <- FindVariableFeatures(adi1104)
+adi1104[["percent.mt"]] <- PercentageFeatureSet(adi1104, pattern = "^mt-")
+VlnPlot(adi1104, c("nFeature_RNA", "percent.mt"))
+adi1104 <- ScaleData(adi1104)
+adi1104 <- subset(adi1104, subset = percent.mt < 5)
+adi1104 <- RunPCA(adi1104, features = VariableFeatures(adi1104), nfeatures.print = 10)
+adi1104 <- FindNeighbors(adi1104)
+adi1104 <- FindClusters(adi1104)
+adi1104 <- RunUMAP(adi1104, dims = 1:10)
+```
+
+```{r eval = FALSE}
+adi0706 <- NormalizeData(adi0706)
+adi0706 <- FindVariableFeatures(adi0706)
+adi0706[["percent.mt"]] <- PercentageFeatureSet(adi0706, pattern = "^mt-")
+```
+
+```{r}
+VlnPlot(adi0706, c("nFeature_RNA", "percent.mt"))
+```
+
+```{r eval = FALSE}
+adi0706 <- ScaleData(adi0706)
+adi0706 <- subset(adi0706, subset = percent.mt < 5)
+adi0706 <- RunPCA(adi0706, features = VariableFeatures(adi0706), nfeatures.print = 10)
+adi0706 <- FindNeighbors(adi0706)
+adi0706 <- FindClusters(adi0706)
+adi0706 <- RunUMAP(adi0706, dims = 1:10)
+```
+
+```{r eval = FALSE}
+adi0708 <- NormalizeData(adi0708)
+adi0708 <- FindVariableFeatures(adi0708)
+adi0708[["percent.mt"]] <- PercentageFeatureSet(adi0708, pattern = "^mt-")
+```
+
+```{r}
+VlnPlot(adi0708, c("nFeature_RNA", "percent.mt"))
+```
+
+```{r eval = FALSE}
+adi0708 <- ScaleData(adi0708)
+adi0708 <- subset(adi0708, subset = percent.mt < 5)
+adi0708 <- RunPCA(adi0708, features = VariableFeatures(adi0708), nfeatures.print = 10)
+adi0708 <- FindNeighbors(adi0708)
+adi0708 <- FindClusters(adi0708)
+adi0708 <- RunUMAP(adi0708, dims = 1:10)
+```
+
+## Merge two datasets separately
+
+```{r echo = FALSE}
+#saveRDS(adi2020, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020.rds")
+#saveRDS(adi2021, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021.rds")
+adi2020 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020.rds")
+adi2021 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021.rds")
+```
+
+```{r eval = FALSE}
+adi2020.anchors <- FindIntegrationAnchors(object.list = list (adi0722, adi1104), dims = 1:30, verbose = TRUE)
+adi2020 <- IntegrateData(anchorset = adi2020.anchors, dims = 1:30)
+```
+
+```{r}
+head(adi2020@meta.data)
+```
+
+```{r eval = FALSE}
+adi2021.anchors <- FindIntegrationAnchors(object.list = list (adi0706, adi0708), dims = 1:30, verbose = TRUE)
+adi2021 <- IntegrateData(anchorset = adi2021.anchors, dims = 1:30)
+```
+
+```{r}
+head(adi2021@meta.data)
+```
+
+## Process and assess integration, subset
+
+
+```{r eval = FALSE}
+#adi2020 <- NormalizeData(adi2020)
+#adi2020 <- FindVariableFeatures(adi2020)
+adi2020 <- ScaleData(adi2020)
+adi2020 <- RunPCA(adi2020, features = VariableFeatures(adi2020), nfeatures.print = 10)
+adi2020 <- FindNeighbors(adi2020)
+adi2020 <- FindClusters(adi2020)
+adi2020 <- RunUMAP(adi2020, dims = 1:10)
+```
+
+
+```{r eval = FALSE}
+#adi2020 <- NormalizeData(adi2020)
+#adi2020 <- FindVariableFeatures(adi2020)
+adi2021 <- ScaleData(adi2021)
+adi2021 <- RunPCA(adi2021, features = VariableFeatures(adi2021), nfeatures.print = 10)
+adi2021 <- FindNeighbors(adi2021)
+adi2021 <- FindClusters(adi2021)
+adi2021 <- RunUMAP(adi2021, dims = 1:10)
+```
+
+### 2020
+
+```{r}
+DimPlot(adi2020, label = T)
+```
+
+By eye: keep 0, 2, 3, 4, 5, 6, 8, 16, 19
+        remove 1, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 20
+
+
+```{r eval = FALSE}
+adi2020@meta.data$dataset <- 0
+adi2021@meta.data$dataset <- 0
+adi2020@meta.data$dataset[which(sapply(strsplit(colnames(adi2020), "_"), "[", 2) == "1")] <- "0722"
+adi2020@meta.data$dataset[which(sapply(strsplit(colnames(adi2020), "_"), "[", 2) == "2")] <- "1104"
+adi2021@meta.data$dataset[which(sapply(strsplit(colnames(adi2021), "_"), "[", 2) == "1")] <- "0706"
+adi2021@meta.data$dataset[which(sapply(strsplit(colnames(adi2021), "_"), "[", 2) == "2")] <- "0708"
+```
+
+```{r}
+DimPlot(adi2020, group.by = "dataset")
+table(adi2020@meta.data$dataset, adi2020@meta.data$seurat_clusters)
+heatmap(table(adi2020@meta.data$dataset, adi2020@meta.data$seurat_clusters), Colv = NA, Rowv = NA, scale = 'none')
+```
+
+Remove cluster 1
+
+```{r}
+VlnPlot(object = adi2020, features = c("Col1a1", "Cd34"), ncol = 2)
+VlnPlot(object = adi2020, features = c("Dpp4", "Cd9"), ncol = 2)
+FeaturePlot(object = adi2020, features = c("Col1a1", "Cd34"))
+FeaturePlot(object = adi2020, features = c("Dpp4", "Cd9"))
+```
+
+```{r}
+VlnPlot(object = adi2020, features = c("Pecam1", "Ptprc"), ncol = 2)
+VlnPlot(object = adi2020, features = c("Krt14", "Krt5"), ncol = 2)
+VlnPlot(object = adi2020, features = c("Lyve1", "Krt10", "Acta2"), ncol = 3)
+FeaturePlot(object = adi2020, features = c("Pecam1", "Ptprc"))
+FeaturePlot(object = adi2020, features = c("Krt14", "Krt5"))
+FeaturePlot(object = adi2020, features = c("Lyve1", "Krt10", "Acta2"))
+```
+
+Evaluating by eye: remove 12, 7, 9, 14, 17, 18, 20, 10, 11, 19
+                   keep 0, 2, 3, 4, 5, 6, 8, 13, 16, 17, 19, 20, 12, 10, 11
+
+
+```{r echo = FALSE}
+#write.csv(adi2020.markers, file = "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_markers.csv")
+#write.csv(adi2021.markers, file = "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_markers.csv")
+#write.csv(adi2020.markers.pos, file = "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_markers_pos.csv")
+#write.csv(adi2021.markers.pos, file = "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_markers_pos.csv")
+adi2020.markers <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_markers.csv")
+adi2021.markers <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_markers.csv")
+adi2020.markers.pos <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_markers_pos.csv")
+adi2021.markers.pos <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_markers_pos.csv")
+```
+
+```{r eval = FALSE}
+adi2020.markers <- FindAllMarkers(object = adi2020, min.pct = 0.25, logfc.threshold = 0.25)
+adi2020.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+```{r}
+unique(adi2020.markers$cluster[which(adi2020.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))]) # keep
+unique(adi2020.markers$cluster[which(adi2020.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))]) # remove
+adi2020.markers$cluster[which(adi2020.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2020.markers$cluster[which(adi2020.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+adi2020.markers$gene[which(adi2020.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2020.markers$gene[which(adi2020.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+```
+
+
+Keep: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 18, 19; every cluster except 13, 17, 20
+Remove: 0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13~(Krt5, Krt14z), 14, 15, 16, 17, 18, 19, 20; every cluster except 5
+
+Keep 5
+Remove 13, 17, 20
+
+
+
+```{r eval = FALSE}
+adi2020.markers.pos <- FindAllMarkers(object = adi2020, min.pct = 0.25, only.pos = T, logfc.threshold = 0.25)
+adi2020.markers.pos %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+```{r}
+unique(adi2020.markers.pos$cluster[which(adi2020.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))]) # keep
+unique(adi2020.markers.pos$cluster[which(adi2020.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))]) # remove
+
+adi2020.markers.pos$cluster[which(adi2020.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2020.markers.pos$cluster[which(adi2020.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+adi2020.markers.pos$gene[which(adi2020.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2020.markers.pos$gene[which(adi2020.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+```
+
+### A few more allowlist markers: Plin1, Pparg, GFP, CellTag
+
+```{r}
+VlnPlot(object = adi2020, features = c("Plin1", "Pparg"), ncol = 2)
+VlnPlot(object = adi2020, features = c("GFP.CDS", "CellTag.UTR"), ncol = 2)
+FeaturePlot(object = adi2020, features = c("Plin1", "Pparg"))
+FeaturePlot(object = adi2020, features = c("GFP.CDS", "CellTag.UTR"))
+```
+
+Question: Do these additional markers impact what to keep? E.g. Remove clusters 1, 4?
+
+
+-------------------------------------------------------
+
+DimPlot: By eye: keep 0, 2, 3, 4, 5, 6, 8, 16, 19
+                 remove 1, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 20
+
+Heat map: Remove cluster 1
+
+VlnPlot: Evaluating by eye: remove 12, 7, 9, 14, 17, 18, 20, 10, 11, 19
+                            keep 0, 2, 3, 4, 5, 6, 8, 13, 16, 17, 19, 20, 12, 10, 11
+                            
+FindMarkers: Keep 5
+             Remove 13, 17, 20
+
+FindMarkersPos: Keep 0, 2, 3, 4~, 5, 6, 10~, 11~, 16~, 19~
+                Remove: 3~Krt10, 7, 9~Ptprc, 10, 11, 12, 14 ,17, 18~Ptprc, 19, 20~Ptprc only occurs once
+
+Final:
+Keep: 0, 2, 3, 4, 5, 6, 8, 16
+Remove: 1, 13, 17, 20, 12, 7, 9, 10, 11, 12, 14, 19, 18
+
+What to do with 15?? --> Keep
+
+```{r}
+DimPlot(adi2020, label = T)
+```
+
+
+### 2021
+
+```{r}
+DimPlot(adi2021, label = T)
+```
+
+By eye: keep 0, 1, 2, 3, 4, 5, 6, 7
+        remove 8, 9, 10, 11, 12, 13, 14, 15, 17, 18
+
+
+```{r}
+DimPlot(adi2021, group.by = "dataset")
+table(adi2021@meta.data$dataset, adi2021@meta.data$seurat_clusters)
+heatmap(table(adi2021@meta.data$dataset, adi2021@meta.data$seurat_clusters), Colv = NA, Rowv = NA, scale = 'none')
+```
+
+Remove clusters 9, 10, 11, 12, 13, 14
+
+```{r}
+VlnPlot(object = adi2021, features = c("Col1a1", "Cd34"), ncol = 2)
+VlnPlot(object = adi2021, features = c("Dpp4", "Cd9"), ncol = 2)
+FeaturePlot(object = adi2021, features = c("Col1a1", "Cd34"))
+FeaturePlot(object = adi2021, features = c("Dpp4", "Cd9"))
+```
+
+```{r}
+VlnPlot(object = adi2021, features = c("Pecam1", "Ptprc"), ncol = 2)
+VlnPlot(object = adi2021, features = c("Krt14", "Krt5"), ncol = 2)
+VlnPlot(object = adi2021, features = c("Lyve1", "Krt10", "Acta2"), ncol = 3)
+FeaturePlot(object = adi2021, features = c("Pecam1", "Ptprc"))
+FeaturePlot(object = adi2021, features = c("Krt14", "Krt5"))
+FeaturePlot(object = adi2021, features = c("Lyve1", "Krt10", "Acta2"))
+```
+
+Evaluating by eye: remove 9, 10, 11, 15, 12, 14, 13, 16, 18
+                   keep 0, 1, 2, 3, 4, 5, 6, 7, 8
+
+
+```{r eval = FALSE}
+adi2021.markers <- FindAllMarkers(object = adi2021, min.pct = 0.25, logfc.threshold = 0.25)
+adi2021.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+```{r}
+unique(adi2021.markers$cluster[which(adi2021.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))]) # keep
+unique(adi2021.markers$cluster[which(adi2021.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))]) # remove
+adi2021.markers$cluster[which(adi2021.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2021.markers$cluster[which(adi2021.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+adi2021.markers$gene[which(adi2021.markers$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2021.markers$gene[which(adi2021.markers$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+
+```
+
+Keep: all
+Remove: all
+
+Keep, only appear once: 1~Dpp4,  5~Col1a1, 8~Cd9, 15~Col1a1
+Remove, only appear once: 0~Krt5, 2~Krt5, 3~Acta2, 13~Krt5, 18~Krt5
+
+
+
+```{r eval = FALSE}
+adi2021.markers.pos <- FindAllMarkers(object = adi2021, min.pct = 0.25, only.pos = T, logfc.threshold = 0.25)
+adi2021.markers.pos %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+```{r}
+unique(adi2021.markers.pos$cluster[which(adi2021.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))]) # keep
+unique(adi2021.markers.pos$cluster[which(adi2021.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))]) # remove
+
+adi2021.markers.pos$cluster[which(adi2021.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2021.markers.pos$cluster[which(adi2021.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+adi2021.markers.pos$gene[which(adi2021.markers.pos$gene %in% c("Col1a1", "Cd34", "Dpp4", "Cd9"))] # keep
+adi2021.markers.pos$gene[which(adi2021.markers.pos$gene %in% c("Pecam1", "Ptprc", "Krt14", "Krt5", "Lyve1", "Krt10", "Acta2"))] # remove
+```
+
+Keep: 0, 2, 3~Cd9, 4~Dpp4, 5~Col1a1, 6~Dpp4, 7, 12~Cd9, 14~Cd9, 16~Cd9
+Remove: 9, 10~Ptprc, 11~Ptprc, 12, 13~Krt5, 14, 15~Ptprc, 16~Ptprc
+
+
+### A few more allowlist markers: Plin1, Pparg, GFP, CellTag
+
+```{r}
+VlnPlot(object = adi2021, features = c("Plin1", "Pparg"), ncol = 2)
+VlnPlot(object = adi2021, features = c("GFP.CDS", "CellTag.UTR"), ncol = 2)
+FeaturePlot(object = adi2021, features = c("Plin1", "Pparg"))
+FeaturePlot(object = adi2021, features = c("GFP.CDS", "CellTag.UTR"))
+```
+
+Question: Do these additional markers impact what to keep? E.g. Keep cluster 11?
+
+-------------------------------------------------------
+
+DimPlot: By eye: keep 0, 1, 2, 3, 4, 5, 6, 7
+                 remove 8, 9, 10, 11, 12, 13, 14, 15, 17, 18
+
+
+Heat map: Remove clusters 9, 10, 11, 12, 13, 14
+
+VlnPlot: Evaluating by eye: remove 9, 10, 11, 15, 12, 14, 13, 16, 18
+                            keep 0, 1, 2, 3, 4, 5, 6, 7, 8
+                            
+FindMarkers: Keep, only appear once: 1~Dpp4,  5~Col1a1, 8~Cd9, 15~Col1a1
+             Remove, only appear once: 0~Krt5, 2~Krt5, 3~Acta2, 13~Krt5, 18~Krt5
+
+FindMarkersPos: Keep: 0, 2, 3~Cd9, 4~Dpp4, 5~Col1a1, 6~Dpp4, 7, 12~Cd9, 14~Cd9, 16~Cd9
+                Remove: 9, 10~Ptprc, 11~Ptprc, 12, 13~Krt5, 14, 15~Ptprc, 16~Ptprc
+
+
+Final:
+Keep: 0, 1, 2, 3, 4, 5, 6, 7, 8
+Remove: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+
+```{r}
+DimPlot(adi2021, label = T)
+```
+
+
+
+
+## Subset
+
+```{r echo = FALSE}
+#saveRDS(adi2020_sub, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_sub.rds")
+#saveRDS(adi2021_sub, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_sub.rds")
+adi2020_sub <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2020_sub.rds")
+adi2021_sub <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2021_sub.rds")
+```
+
+```{r eval = FALSE}
+adi2020_sub <- subset(adi2020, idents = c(0, 2, 3, 4, 5, 6, 8, 15, 16))
+```
+
+```{r eval = FALSE}
+adi2021_sub <- subset(adi2021, idents = c(0, 1, 2, 3, 4, 5, 6, 7, 8))
+```
+
+## Cd34
+
+```{r}
+FeaturePlot(adi2020_sub, features = "Cd34")
+FeaturePlot(adi2021_sub, features = "Cd34")
+```
+
+```{r eval = FALSE}
+adi2020_sub <- RunPCA(adi2020_sub)
+adi2021_sub <- RunPCA(adi2021_sub)
+adi2020_sub <- RunUMAP(adi2020_sub, dims = 1:10)
+adi2021_sub <- RunUMAP(adi2021_sub, dims = 1:10)
+```
+
+```{r}
+FeaturePlot(adi2020_sub, features = "Cd34")
+FeaturePlot(adi2021_sub, features = "Cd34")
+```
+
+```{r}
+VlnPlot(adi2020_sub, features = "Cd34")
+VlnPlot(adi2021_sub, features = "Cd34")
+DimPlot(adi2020_sub, label = T)
+DimPlot(adi2021_sub, label = T)
+```
+
+## Merge
+
+### Remove cluster 15 from adi2020_sub and then merge
+
+```{r echo = FALSE}
+#saveRDS(adi, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi.rds")
+#saveRDS(adi2, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2.rds")
+adi <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi.rds") # THIS IS THE OBJECT TO USE MOVING FORWARD
+#adi2 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi2.rds")
+```
+
+```{r eval = FALSE}
+#adi.anchors <- FindIntegrationAnchors(object.list = list(subset(adi2020_sub, idents = c(0, 2, 3, 4, 5, 6, 8, 16)), adi2021_sub), dims = 1:30, verbose = TRUE)
+adi <- IntegrateData(anchorset = adi.anchors, dims = 1:30, normalization.method = "LogNormalize")
+```
+
+```{r}
+head(adi@meta.data)
+```
+
+
+
+```{r eval = FALSE}
+adi <- ScaleData(adi)
+adi <- RunPCA(adi, features = VariableFeatures(adi), nfeatures.print = 10)
+adi <- FindNeighbors(adi)
+adi <- FindClusters(adi)
+adi <- RunUMAP(adi, dims = 1:10)
+```
+
+```{r}
+DimPlot(adi, label = T)
+DimPlot(adi, group.by = "dataset")
+table(adi@meta.data$dataset, adi@meta.data$seurat_clusters)
+heatmap(table(adi@meta.data$dataset, adi@meta.data$seurat_clusters), Colv = NA, Rowv = NA, scale = 'none')
+```
+
+### Try merge THEN remove Cd34low cells
+
+```{r eval = FALSE}
+adi.anchors2 <- FindIntegrationAnchors(object.list = list (adi2020_sub, adi2021_sub), dims = 1:30, verbose = TRUE)
+adi2 <- IntegrateData(anchorset = adi.anchors2, dims = 1:30)
+```
+
+```{r}
+head(adi2@meta.data)
+```
+
+```{r eval = FALSE}
+adi2 <- ScaleData(adi2)
+adi2 <- RunPCA(adi2, features = VariableFeatures(adi2), nfeatures.print = 10)
+adi2 <- FindNeighbors(adi2)
+adi2 <- FindClusters(adi2)
+adi2 <- RunUMAP(adi2, dims = 1:10)
+```
+
+```{r}
+DimPlot(adi2, label = T)
+DimPlot(adi2, group.by = "dataset")
+table(adi2@meta.data$dataset, adi2@meta.data$seurat_clusters)
+heatmap(table(adi2@meta.data$dataset, adi2@meta.data$seurat_clusters), Colv = NA, Rowv = NA, scale = 'none')
+```
+
+
+
+```{r}
+clust15 <- paste0(colnames(adi2020_sub)[which(adi2020_sub@meta.data$seurat_clusters == 15)], "_1")
+DimPlot(adi2, cells.highlight = clust15)
+table(adi2@meta.data$seurat_clusters[which(colnames(adi2) %in% clust15)])
+```
+
+Compare: 
+
+adi2020 cluster 15 195/20 0722/1104
+adi2 cluster 14 191/19 0722/1104
+
+
+```{r}
+FeaturePlot(adi, features = "Cd34")
+FeaturePlot(adi2, features = "Cd34")
+VlnPlot(adi, features = "Cd34")
+VlnPlot(adi2, features = "Cd34")
+```
+
+```{r}
+table(colnames(adi2)[which(adi2@meta.data$seurat_clusters == 14)] %in% clust15)
+colnames(adi2)[which(adi2@meta.data$seurat_clusters == 14)][!colnames(adi2)[which(adi2@meta.data$seurat_clusters == 14)] %in% clust15]
+```
+
+```{r}
+DimPlot(adi2, group.by = "celltag", pt.size = 1, order = c("v1", "v2", "none"), cols = c("#F4F4F4", "#440154", "#FDE725"))
+```
+
+```{r echo = FALSE}
+#saveRDS(adi3, "~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi3.rds")
+adi3 <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/210910_analysis/adi3.rds")
+```
+
+
+```{r eval = FALSE}
+adi3 <- subset(adi2, idents = c(0:13))
+adi3 <- ScaleData(adi3)
+adi3 <- RunPCA(adi3, features = VariableFeatures(adi3), nfeatures.print = 10)
+adi3 <- FindNeighbors(adi3)
+adi3 <- FindClusters(adi3)
+adi3 <- RunUMAP(adi3, dims = 1:10)
+```
+
+```{r}
+DimPlot(adi, label = T) + NoLegend()
+#DimPlot(adi3, label = T)
+```
+
+
+```{r}
+table(adi@meta.data$celltag)
+DimPlot(adi, group.by = "celltag", pt.size = 1, order = c("v1", "v2", "none"), cols = c("#F4F4F4", "#440154", "#FDE725"))
+DimPlot(adi3, group.by = "celltag", pt.size = 1, order = c("v1", "v2", "none"), cols = c("#F4F4F4", "#440154", "#FDE725"))
+```
+
+```{r}
+dim(adi)
+dim(adi3)
+table(adi@meta.data$celltag)
+```
+
+
+
+## Permutation test with adi
+
+```{r eval = FALSE}
+celltag <- adi@meta.data$celltag
+celltag[which(celltag == "none")] <- NA
+perm_data <- data.frame(integrated_snn_res.0.8 = adi@meta.data$integrated_snn_res.0.8, post.call = celltag)
+write.table(perm_data,"~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/meta.clone.clean.integrated.v1.v2.1.v2.210910.txt", sep = "\t")
+```
+
+
+## Find 3000 DE genes for CellOracle, use raw counts matrix
+
+```{r}
+raw_var_features <- FindVariableFeatures(adi@assays$RNA, nfeatures = 3000)
+```
+
+```{r}
+var_feats <- VariableFeatures(raw_var_features)
+```
+
+### Add enriched column metadata
+
+```{r}
+adi@meta.data$enriched <- rep(NA, dim(adi)[2])
+adi@meta.data$enriched[which(adi@meta.data$seurat_clusters %in% c(1, 4, 5, 10, 12))] <- "V1"
+adi@meta.data$enriched[which(adi@meta.data$seurat_clusters %in% c(1, 3, 6, 9, 10, 12))] <- "V2"
+adi@meta.data$enriched[which(adi@meta.data$seurat_clusters %in% c(1, 10, 12))] <- "Both"
+table(adi@meta.data$enriched)
+```
+
+### Remove 0722 and prepare permutation test
+
+```{r}
+adi_no0722 <- subset(adi, cells = which(adi@meta.data$dataset %in% c("0706", "0708", "1104")))
+celltag <- adi_no0722@meta.data$celltag
+celltag[which(celltag == "none")] <- NA
+perm_data <- data.frame(integrated_snn_res.0.8 = adi_no0722@meta.data$integrated_snn_res.0.8, post.call = celltag)
+write.table(perm_data,"~/OneDrive/MorrisLab/Guillermo_project/21_07_21_data/meta.clone.clean.integrated.v1.v2.1.v2.210910_no0722.txt", sep = "\t")
+```
+
+### Making some plots
+
+```{r}
+DimPlot(adi, cells.highlight = list(colnames(adi)[which(adi@meta.data$seurat_clusters == 1)], colnames(adi)[which(adi@meta.data$seurat_clusters == 4)], colnames(adi)[which(adi@meta.data$seurat_clusters == 5)], colnames(adi)[which(adi@meta.data$seurat_clusters == 10)], colnames(adi)[which(adi@meta.data$seurat_clusters == 12)]), cols.highlight = viridis(5), sizes.highlight = 1, label = T) + NoLegend()
+DimPlot(adi, cells.highlight = list(colnames(adi)[which(adi@meta.data$seurat_clusters == 1)], colnames(adi)[which(adi@meta.data$seurat_clusters == 4)], colnames(adi)[which(adi@meta.data$seurat_clusters == 5)], colnames(adi)[which(adi@meta.data$seurat_clusters == 10)], colnames(adi)[which(adi@meta.data$seurat_clusters == 12)]), cols.highlight = viridis(5), sizes.highlight = 1, label = T) + NoLegend()
+```
 
 
 
