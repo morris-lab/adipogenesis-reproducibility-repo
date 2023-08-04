@@ -17,7 +17,7 @@ This notebook contains code used to integrate 4 biological replicates, quality c
 
 ## Load processed data
 
-Raw data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
+Raw data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/b75e3e90389bf38c5524
 
 ```{r load-data}
 p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
@@ -589,6 +589,8 @@ s5i <- ggplot(celltag_dist_df[which(celltag_dist_df$Var2 != "none"), ], aes(x = 
 s5i
 ```
 
+Again, we have deposited our whole processed P21 dataset on Figshare. It has been analyzed according to the code in this notebook: 
+https://figshare.com/s/b75e3e90389bf38c5524
 
 
 
