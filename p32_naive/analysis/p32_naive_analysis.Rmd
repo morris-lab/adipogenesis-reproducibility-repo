@@ -7,6 +7,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(ggplot2)
+library(scclusteval)
+library(grid)
 ```
 
 This notebook contains code used to integrate 4 biological replicates, quality control, and analyze P32 naive data following alignment. Code for all panels from Figure 2, Figure 3A-B, and Supplementary Figure 5 is outlined here.
@@ -29,6 +33,10 @@ colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", 
 colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
 ```
 
+```{r}
+colpal2_pink_blue <- c("#E75F62", "#232380")
+```
+
 ## Prelim plots
 
 ```{r}
@@ -37,7 +45,7 @@ p2b
 ```
 
 ```{r}
-p2c <- DimPlot(adi_merged, cells.highlight = list("Progenitors" = colnames(adi_merged)[which(adi_merged$celltag == "v2")], "Preadipocytes" = colnames(adi_merged)[which(adi_merged$celltag == "v1")]), cols.highlight = c("#232380", "#E75F62"), sizes.highlight = 0.5) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+p2c <- DimPlot(p32, cells.highlight = list("Progenitors" = colnames(p32)[which(p32$celltag == "v2")], "Preadipocytes" = colnames(p32)[which(p32$celltag == "v1")]), cols.highlight = c("#232380", "#E75F62"), sizes.highlight = 0.5) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
 p2c
 ```
 
@@ -60,15 +68,14 @@ s5a
 
 ```{r}
 # Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
-adi_merged$is_transplant <- TRUE
-adi_merged$is_transplant[which(adi_merged@assays$RNA@counts["GFP.CDS", ] == 0 & adi_merged$celltag == "none")] <- FALSE
-#table(adi_merged$is_transplant)
+p32$is_transplant <- TRUE
+p32$is_transplant[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- FALSE
+#table(p32$is_transplant)
 ```
 
 ```{r}
-tsne.embedding <- adi_merged@reductions$umap@cell.embeddings
-#host.embedding <- as.data.frame(tsne.embedding[-which(adi_merged$is_transplant), ])
-transplant.embedding <- as.data.frame(tsne.embedding[which(adi_merged$is_transplant), ])
+umap.embedding <- p32@reductions$umap@cell.embeddings
+transplant.embedding <- as.data.frame(umap.embedding[which(p32$is_transplant), ])
 ```
 
 ```{r}
@@ -121,8 +128,8 @@ Classifications, hybrids, p-values, and identity fractions imported to P32 Seura
 ### Figures and visualizations of Capybara data
 
 ```{r}
-adi_merged$capy_new_class_short <- gsub("_", " ", adi_merged$capy_new_class_short)
-adi_merged$capy_new_class_short <- factor(adi_merged$capy_new_class_short, levels = c("Int prog", "Trans int prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+p32$capy_new_class_short <- gsub("_", " ", p32$capy_new_class_short)
+p32$capy_new_class_short <- factor(p32$capy_new_class_short, levels = c("Int prog", "Trans int prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
 ```
 
 ```{r}
@@ -134,59 +141,74 @@ g_legend <- function(a.gplot){
 ```
 
 ```{r}
-p2d <- DimPlot(adi_merged, group.by = "capy_new_class_short", cols = colpal6) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), plot.title = element_blank(), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
-l2d <- g_legend(p3d)
+p2d <- DimPlot(p32, group.by = "capy_new_class_short", cols = colpal6) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), plot.title = element_blank(), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+l2d <- g_legend(p2d)
 p2d + NoLegend()
 p2d <- grid.arrange(p2d + theme(legend.position = "none"), l2d, nrow = 2, heights = unit(c(2, 1), c("in", "in")))
-p2d2
+p2d
 ```
 
 ```{r}
-ctcapy <- data.frame(table(adi_merged$celltag, adi_merged$capy_new_class_short))
+ctcapy <- data.frame(table(p32$celltag, p32$capy_new_class_short))
 p2el <- ggplot(ctcapy[ctcapy$Var1 == "v2", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
 p2er <- ggplot(ctcapy[ctcapy$Var1 == "v1", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Cd9 CellTagged cells") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
 p2e <- p2el + p2er
+p2e
 ```
 
 ### Host vs. transplant
 
 ```{r}
 # Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
-adi_merged$celltag_origin <- adi_merged$celltag
-adi_merged$celltag_origin[which(adi_merged@assays$RNA@counts["GFP.CDS", ] == 0 & adi_merged$celltag == "none")] <- "None-Host"
-adi_merged$celltag_origin[which(adi_merged@assays$RNA@counts["GFP.CDS", ] > 0 & adi_merged$celltag == "none")] <- "None-Transplant"
+p32$celltag_origin <- p32$celltag
+p32$celltag_origin[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- "None-Host"
+p32$celltag_origin[which(p32@assays$RNA@counts["GFP.CDS", ] > 0 & p32$celltag == "none")] <- "None-Transplant"
 ```
 
-#### Remove transplant cells and compare clusters
+#### Remove transplant cells, re-cluster, and compare clusters to original host-transplant co-embedding
 
 ```{r}
-#adi_merged <- FindNeighbors(adi_merged, return.neighbor = T)
-```
-
-```{r}
-DefaultAssay(adi_merged) <- "integrated"
+p32 <- FindNeighbors(p32, return.neighbor = T)
 ```
 
 ```{r}
-adi_merged_sub <- adi_merged[, which(adi_merged$celltag_origin == "None-Host")]
+DefaultAssay(p32) <- "integrated"
 ```
 
 ```{r}
-adi_merged_sub <- ScaleData(adi_merged_sub)
-adi_merged_sub <- FindVariableFeatures(adi_merged_sub)
-adi_merged_sub <- RunPCA(adi_merged_sub)
-adi_merged_sub <- RunUMAP(adi_merged_sub, dims = 1:10)
-adi_merged_sub <- FindNeighbors(adi_merged_sub)
-adi_merged_sub <- FindClusters(adi_merged_sub)
-adi_merged_sub <- FindNeighbors(adi_merged_sub, return.neighbor = T)
+# New clusters and embedding of host cells only
+p32_sub <- p32[, which(p32$celltag_origin == "None-Host")]
 ```
 
 ```{r}
-DimPlot(adi_merged_sub, label = TRUE, label.size = 7) + NoLegend()
+# Clusters and embedding generated with host and transplant cells
+p32_sub2 <- p32[, which(p32$celltag_origin == "None-Host")]
 ```
 
 ```{r}
-nndistdf <- data.frame(adi_merged_sub2@neighbors$integrated.nn@nn.dist, row.names = adi_merged_sub2@neighbors$integrated.nn@cell.names)
+p32_sub <- ScaleData(p32_sub)
+p32_sub <- FindVariableFeatures(p32_sub)
+p32_sub <- RunPCA(p32_sub)
+p32_sub <- RunUMAP(p32_sub, dims = 1:10)
+p32_sub <- FindNeighbors(p32_sub)
+p32_sub <- FindClusters(p32_sub)
+p32_sub <- FindNeighbors(p32_sub, return.neighbor = T)
+```
+
+```{r}
+DimPlot(p32_sub2, label = TRUE, label.size = 7) + NoLegend()
+```
+
+```{r}
+DimPlot(p32_sub, label = TRUE, label.size = 7) + NoLegend()
+```
+
+```{r}
+p32_sub2 <- FindNeighbors(p32_sub2, reduction = "umap", dims = 1:2, k.param = 20, return.neighbor = TRUE)
+```
+
+```{r}
+nndistdf <- data.frame(p32_sub2@neighbors$integrated.nn@nn.dist, row.names = p32_sub2@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
@@ -195,21 +217,16 @@ nndistdf_mean <- apply(nndistdf, 1, mean)
 
 #### Now find distances and calculate mean for reclustered host data with same cells
 
-
 ```{r}
-nncells_orig <- data.frame(adi_merged_sub2@neighbors$integrated.nn@nn.idx, row.names = adi_merged_sub2@neighbors$integrated.nn@cell.names)
+nncells_orig <- data.frame(p32_sub2@neighbors$integrated.nn@nn.idx, row.names = p32_sub2@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
-umap_new <- adi_merged_sub@reductions$umap@cell.embeddings
+umap_new <- p32_sub@reductions$umap@cell.embeddings
 ```
 
 ```{r}
 euclidean <- function(a, b) sqrt(sum((a - b)^2))
-```
-
-```{r}
-euclidean(umap_new[rownames(nncells_orig)[1], ], umap_new[nncells_orig[1, 2], ])
 ```
 
 ```{r}
@@ -234,7 +251,7 @@ for(j in 1:dim(nncells_orig)[1]) {
   row <- sample.int(dim(nncells_orig)[1], 20, replace = FALSE)
   nncells_random <- rbind(nncells_random, row)
 }
-rownames(nncells_random) <- adi_merged_sub2@neighbors$integrated.nn@cell.names
+rownames(nncells_random) <- p32_sub2@neighbors$integrated.nn@cell.names
 ```
 
 ```{r}
@@ -254,23 +271,14 @@ nndistdf_random_mean <- apply(nndistdf_random, 1, mean)
 ```
 
 ```{r}
-dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1])),
-                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf_random_mean))
-```
-
-```{r}
-dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Random"))
-```
-
-```{r}
 nncells_random_in_clust <- data.frame()
 for(j in 1:dim(nncells_orig)[1]) {
-  clust <- adi_merged_sub$seurat_clusters[rownames(nncells_orig)[j]]
-  cells_in_clust <- c(1:dim(nncells_orig)[1])[which(adi_merged_sub$seurat_clusters == clust)]
+  clust <- p32_sub$seurat_clusters[rownames(nncells_orig)[j]]
+  cells_in_clust <- c(1:dim(nncells_orig)[1])[which(p32_sub$seurat_clusters == clust)]
   row <- cells_in_clust[sample.int(length(cells_in_clust), 20, replace = FALSE)]
   nncells_random_in_clust <- rbind(nncells_random_in_clust, row)
 }
-rownames(nncells_random_in_clust) <- adi_merged_sub2@neighbors$integrated.nn@cell.names
+rownames(nncells_random_in_clust) <- p32_sub2@neighbors$integrated.nn@cell.names
 ```
 
 ```{r}
@@ -290,16 +298,7 @@ nndistdf_random_in_clust_mean <- apply(nndistdf_random_in_clust, 1, mean)
 ```
 
 ```{r}
-dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1]), rep("Random_in_clust", dim(nncells_orig)[1])),
-                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf_random_mean, nndistdf_random_in_clust_mean))
-```
-
-```{r}
-dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Random", "Random_in_clust"))
-```
-
-```{r}
-nndistdf2_own <- data.frame(adi_merged_sub@neighbors$integrated.nn@nn.dist, row.names = adi_merged_sub@neighbors$integrated.nn@cell.names)
+nndistdf2_own <- data.frame(p32_sub@neighbors$integrated.nn@nn.dist, row.names = p32_sub@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
@@ -325,82 +324,78 @@ s5c
 ## Jaccard analysis associating cell type and louvain cluster
 
 ```{r}
-adi_merged$cp_ip <- ifelse(adi_merged$capy_new_class_short == "Comm preadip", "comm_preadip", ifelse(adi_merged$capy_new_class_short == "Int prog", "int_prog", NA))
-jacc <- data.frame(PairWiseJaccardSets(adi_merged$seurat_clusters, adi_merged$cp_ip))
+p32$cp_ip <- ifelse(p32$capy_new_class_short == "Comm preadip", "comm_preadip", ifelse(p32$capy_new_class_short == "Int prog", "int_prog", NA))
+jacc <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip))
 ```
 
 ```{r}
-numip <- table(adi_merged$capy_new_class_short)["Int prog"]
-numcp <- table(adi_merged$capy_new_class_short)["Comm preadip"] 
-numna <- sum(table(adi_merged$capy_new_class_short)) - table(adi_merged$capy_new_class_short)["Int prog"] - table(adi_merged$capy_new_class_short)["Comm preadip"] 
-adi_merged$cp_ip_random <- sample(c(rep("int_prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
-jacc_rand <- data.frame(PairWiseJaccardSets(adi_merged$seurat_clusters, adi_merged$cp_ip_random))
+numip <- table(p32$capy_new_class_short)["Int prog"]
+numcp <- table(p32$capy_new_class_short)["Comm preadip"] 
+numna <- sum(table(p32$capy_new_class_short)) - table(p32$capy_new_class_short)["Int prog"] - table(p32$capy_new_class_short)["Comm preadip"] 
+p32$cp_ip_random <- sample(c(rep("int_prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
+jacc_rand <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip_random))
 jacc_rand$rep <- 1
 jacc_rand$cluster <- 0:13
 ```
 
 ```{r}
 for(i in 2:1000) {
-  adi_merged$cp_ip_random <- sample(c(rep("int_prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
-  jacc_rand_intermed <- data.frame(PairWiseJaccardSets(adi_merged$seurat_clusters, adi_merged$cp_ip_random))
+  p32$cp_ip_random <- sample(c(rep("int_prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
+  jacc_rand_intermed <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip_random))
   jacc_rand_intermed$rep <- i
   jacc_rand_intermed$cluster <- 0:13
   jacc_rand <- rbind(jacc_rand, jacc_rand_intermed)
 }
 ```
 
-
 ```{r}
 mzscores <- c()
-#mpzscores <- c()
 for(i in 1:14) {
-  #zip <- (jacc$int_prog[i] - mean(jacc_rand$int_prog[jacc_rand$cluster == i - 1])) / sd(jacc_rand$int_prog[jacc_rand$cluster == i - 1])
-  #zcp <- (jacc$comm_preadip[i] - mean(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])) / sd(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])
-  #pip <- pnorm(zip, mean = mean(jacc_rand$int_prog[jacc_rand$cluster == i - 1]), sd = sd(jacc_rand$int_prog[jacc_rand$cluster == i - 1]), lower.tail = TRUE)
-  #pcp <- pnorm(zcp, mean = mean(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1]), sd = sd(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1]), lower.tail = TRUE)
-  #zscores <- c(zscores, zip, zcp)
-  #pzscores <- c(pzscores, pip, pcp)
-  #print(mad(jacc_rand$int_prog[jacc_rand$cluster == i - 1]))
-  #print(mad(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1]))
-  mzip <- (jacc$int_prog[i] - median(jacc_rand$int_prog[jacc_rand$cluster == i - 1])) / mad(jacc_rand$int_prog[jacc_rand$cluster == i - 1])
-  mzcp <- (jacc$comm_preadip[i] - median(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])) / mad(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])
+  mzip <- 0.6745 * (jacc$int_prog[i] - median(jacc_rand$int_prog[jacc_rand$cluster == i - 1])) / mad(jacc_rand$int_prog[jacc_rand$cluster == i - 1])
+  mzcp <- 0.6745 * (jacc$comm_preadip[i] - median(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])) / mad(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])
   mzscores <- c(mzscores, mzip, mzcp)
 }
 ```
 
 ```{r}
-zdf <- data.frame(zscore = zscores, pvals = pzscores, normal_pval = normal, mzscore = mzscores, cell_type = rep(c("int_prog", "comm_preadip"), 14), cluster = c(0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13))
+zdf <- data.frame(mzscore = mzscores, cell_type = rep(c("int_prog", "comm_preadip"), 14), cluster = c(0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13))
 ```
 
 ```{r}
 p2f <- ggplot(zdf, aes(x = cluster, y = cell_type, fill = mzscore)) + 
   geom_tile(color = "white",
             lwd = 0.5,
-            linetype = 1) + geom_text(aes(label = round(zscore))) + theme_classic() + theme(axis.line = element_blank(), legend.position = "bottom", text = element_text(size = 8)) +
+            linetype = 1) + geom_text(aes(label = round(mzscore))) + theme_classic() + theme(axis.line = element_blank(), legend.position = "bottom", text = element_text(size = 8)) +
   scale_y_discrete("Cell type") +
   scale_x_continuous("Cluster", labels = as.character(seq(0,13)), breaks = seq(0,13)) +
   #scale_x_discrete("Cluster") + coord_fixed() +
   scale_fill_gradient2(
         low = "#053061", mid = "#F7F7F7", high = "#67001F", midpoint = 0)
 p2f
-ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/23_04_18_revised/plots/fig_2_f.pdf", plot = p2f, height = 2, width = 5, units = "in", dpi = 600)
 ```
 
 ## Permutation testing
 
 ```{r}
-df2g <- data.frame(UMAP_1 = adi_merged@reductions$umap@cell.embeddings[, 1], UMAP_2 = adi_merged@reductions$umap@cell.embeddings[, 2], enriched = adi_merged$enriched)
-df2g <- rbind(df2g, data.frame(UMAP_1 = adi_merged@reductions$umap@cell.embeddings[which(adi_merged$enriched == "Both"), 1], UMAP_2 = adi_merged@reductions$umap@cell.embeddings[which(adi_merged$enriched == "Both"), 2], enriched = rep("V1", table(adi_merged$enriched)["Both"])))
+df2g <- data.frame(UMAP_1 = p32@reductions$umap@cell.embeddings[, 1], UMAP_2 = p32@reductions$umap@cell.embeddings[, 2], enriched = p32$enriched)
+df2g <- rbind(df2g, data.frame(UMAP_1 = p32@reductions$umap@cell.embeddings[which(p32$enriched == "Both"), 1], UMAP_2 = p32@reductions$umap@cell.embeddings[which(p32$enriched == "Both"), 2], enriched = rep("V1", table(p32$enriched)["Both"])))
 df2g$enriched <- gsub("Both", "V2", df2g$enriched)
 df2g2 <- na.omit(df2g)
 ```
 
 ```{r}
-p2g <- DimPlot(adi_merged, label = T, label.size = 7, cols = c(rep("gray", 14), colpal2_pink_blue)) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), plot.margin = margin(0, 0, 0, 0)) + NoLegend() + geom_density_2d(data = df2g2, aes(x = UMAP_1, y = UMAP_2, color = enriched))
+p2g <- DimPlot(p32, label = T, label.size = 7, cols = c(rep("gray", 14), colpal2_pink_blue)) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), plot.margin = margin(0, 0, 0, 0)) + NoLegend() + geom_density_2d(data = df2g2, aes(x = UMAP_1, y = UMAP_2, color = enriched))
 p2g
 ```
 
-
+```{r}
+p3h <- DimPlot(adi_merged, cells.highlight = list("Dpp4" = colnames(adi_merged)[which(adi_merged$enriched == "V2")], "Cd9" = colnames(adi_merged)[which(adi_merged$enriched == "V1")], "Both" = colnames(adi_merged)[which(adi_merged$enriched == "Both")]), cols.highlight = c("#232380", "#E75F62", "#1DD3B0")) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+p3h + theme(legend.position = "none")
+l3h <- g_legend(p3h)
+p3hl <- grid.arrange(p3h + theme(legend.position = "none"), l3h, nrow = 2, heights = unit(c(2, 1), c("in", "in")))
+p3hl
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/fig_3_h.pdf", plot = p3hl, height = 3, width = 3, units = "in", dpi = 600)
+```
 
 
 
