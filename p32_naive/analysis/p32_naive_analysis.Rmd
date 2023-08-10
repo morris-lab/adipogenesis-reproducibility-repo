@@ -7,17 +7,21 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages}
 library(Seurat)
 library(ggplot2)
 library(scclusteval)
 library(grid)
 ```
 
+
 This notebook contains code used to integrate 4 biological replicates, quality control, and analyze P32 naive data following alignment. Code for all panels from Figure 2, Figure 3A-B, and Supplementary Figure 5 is outlined here.
 
 ## Load processed data
 
-Raw data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/b75e3e90389bf38c5524
+Raw data are processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/b75e3e90389bf38c5524
 
 ```{r load-data}
 p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
@@ -66,31 +70,6 @@ s5a <- FeaturePlot(p32, features = "Cebpa")
 s5a
 ```
 
-```{r}
-# Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
-p32$is_transplant <- TRUE
-p32$is_transplant[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- FALSE
-#table(p32$is_transplant)
-```
-
-```{r}
-umap.embedding <- p32@reductions$umap@cell.embeddings
-transplant.embedding <- as.data.frame(umap.embedding[which(p32$is_transplant), ])
-```
-
-```{r}
-s5b <- ggplot(transplant.embedding, aes(x = UMAP_1, y = UMAP_2)) +
-  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
-  #scale_fill_viridis(option = "H") +
-  #scale_fill_gradient(low = "white", high = "darkgreen") + 
-  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
-  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "bottom")
-s5b + theme(legend.position = "bottom")
-#ls5b <- g_legend(s5b)
-#s5b <- grid.arrange(p3c + theme(legend.position = "none"), ls5b, nrow = 2, heights = unit(c(2, 1), c("in", "in")))
-#p3cl
-```
-
 ## Capybara with P21 new classification reference
 
 ### Run Capybara using custom reference as defined by cell types in P21 dataset
@@ -123,7 +102,7 @@ for(i in 1:length(perc.list)) {
 colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
 ```
 
-Classifications, hybrids, p-values, and identity fractions imported to P32 Seurat object as `capy_new_class`, `capy_new_class_hybrid`, `capy_pval_xxx`, and `capy_frxn_xxx`, respectively. This information is stored in `p32_naive_processed.rds` on Figshare.
+Classifications, hybrids, p-values, and identity fractions imported to p32 Seurat object as `capy_new_class`, `capy_new_class_hybrid`, `capy_pval_xxx`, and `capy_frxn_xxx`, respectively. This information is stored in `p32_naive_processed.rds` on Figshare.
 
 ### Figures and visualizations of Capybara data
 
@@ -155,6 +134,32 @@ p2er <- ggplot(ctcapy[ctcapy$Var1 == "v1", ], aes(x="", y=Freq, fill=Var2)) + ge
 p2e <- p2el + p2er
 p2e
 ```
+
+```{r}
+# Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
+p32$is_transplant <- TRUE
+p32$is_transplant[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- FALSE
+#table(p32$is_transplant)
+```
+
+```{r}
+umap.embedding <- p32@reductions$umap@cell.embeddings
+transplant.embedding <- as.data.frame(umap.embedding[which(p32$is_transplant), ])
+```
+
+```{r}
+s5b <- ggplot(transplant.embedding, aes(x = UMAP_1, y = UMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  #scale_fill_viridis(option = "H") +
+  #scale_fill_gradient(low = "white", high = "darkgreen") + 
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "bottom")
+s5b + theme(legend.position = "bottom")
+#ls5b <- g_legend(s5b)
+#s5b <- grid.arrange(p3c + theme(legend.position = "none"), ls5b, nrow = 2, heights = unit(c(2, 1), c("in", "in")))
+#p3cl
+```
+
 ## Potential confounders
 
 ### Host vs. transplant

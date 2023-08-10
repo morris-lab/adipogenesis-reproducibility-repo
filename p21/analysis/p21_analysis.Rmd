@@ -21,7 +21,7 @@ This notebook contains code used to analyze P21 data following alignment and qua
 
 ## Load processed data
 
-Raw data is processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
+Raw data are processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
 
 ```{r load-data}
 p21 <- readRDS("~/Downloads/p21_processed.rds")

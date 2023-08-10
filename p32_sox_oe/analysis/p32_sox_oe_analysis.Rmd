@@ -1,0 +1,242 @@
+---
+title: "P32 Sox9 OE Processed Data Analysis"
+author: "Emily Butka"
+date: "2023-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages}
+library(Seurat)
+library(dplyr)
+library(reshape2)
+library(grid)
+library(ggplot2)
+```
+
+This notebook contains code used to analyze two P32 datasets with progenitors or preadipocytes over-expressing Sox9 following alignment and quality control. Code for all panels from Figure 4 and Supplementary Figure 7 is outlined here.
+
+## Load processed data
+
+Raw data are processed in the preceding notebook. Here, we will use the processed data for further analysis. 
+
+Processed Sox9 over-expressed progenitors (experiment from Figure 4A) can be found here: https://figshare.com/s/c241b71c3d1ddf8e488a
+Processed Sox9 over-expressed preadipocytes (experiment from Figure 4G) can be found here: https://figshare.com/s/7ca3418390a66a69d2e0
+
+```{r load-data}
+progs <- readRDS("~/Downloads/p32_sox9_oe_progenitors_processed.rds")
+preadips <- readRDS("~/Downloads/p32_sox9_oe_preadipocytes_processed.rds")
+```
+
+## Color palettes
+
+```{r}
+colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", "#008DF9", "#8400CD", "#00FCCF", "#FF5AAF", "#009F81", "gray")
+```
+
+```{r}
+colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
+```
+
+```{r}
+colpal2_pink_blue <- c("#E75F62", "#232380")
+```
+
+## Capybara with P21 new classification reference
+
+### Run Capybara using custom reference as defined by cell types in P21 dataset
+
+Code and workflow described at https://github.com/morris-lab/Capybara. We did not perform tissue-level classification (Step 1); rather, a high-resolution custom reference was generated and continuous identity measured (Step 2) followed by discrete cell type classification and multiple identity scoring (Step 3).
+
+Custom code to extract hybrid IDs and mean p-values for assignments is as follows, using data frames `bin.count` and `perc.list` described in Capybara workflow:
+
+```{r}
+# hybrids
+bin.count.rowsums <- apply(bin.count, 1, sum)
+rownames(bin.count)[which(bin.count.rowsums > 1)]
+bin.count.greaterthan1 <- apply(bin.count[which(bin.count.rowsums > 1), ], c(1, 2), function(x) {x > 0})
+multi.celltypes <- apply(bin.count.greaterthan1, 1, function(x) {print(colnames(bin.count.greaterthan1)[x])})
+
+hybrids <- c()
+for(i in 1:length(multi.celltypes)) {
+  #print(multi.celltypes[i])
+  hybrids <- c(hybrids, paste(multi.celltypes[[i]], collapse = "-"))
+}
+
+hybrids <- gsub("frxn_cell.type_", "", hybrids)
+
+# p-values for classifications
+pval_avg_mat <- data.frame()
+for(i in 1:length(perc.list)) {
+  pval_avg_mat <- rbind(pval_avg_mat, apply(perc.list[[i]][[1]], 2, mean))
+  rownames(pval_avg_mat)[i] <- names(perc.list[[i]])
+}
+colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
+```
+
+Classifications, hybrids, p-values, and identity fractions imported to progs and preadips Seurat objects as `capy_new_class`, `capy_new_class_hybrid`, `capy_pval_xxx`, and `capy_frxn_xxx`, respectively. This information is stored in `p32_naive_processed.rds` on Figshare.
+
+### Figures and visualizations of Capybara data
+
+```{r}
+g_legend <- function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+```
+
+```{r}
+ct_capy_prog <- data.frame(table(progs$celltag, progs$capy_new_class_short))
+ct_capy_prog$Var2 <- factor(ct_capy_prog$Var2, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID"))
+p4el <- ggplot(ct_capy_prog[ct_capy_prog$Var1 == "None", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Host\n(n = 11,502)") + theme(legend.position="bottom", plot.margin = margin(0, 0, 0, 0), legend.margin = margin(0, 0, 0, 0)) + labs(fill = "Cell type") + scale_fill_manual(values = colpal6[1:5]) + theme(plot.title = element_text(hjust = 0.5))
+p4er <- ggplot(ct_capy_prog[ct_capy_prog$Var1 == "OE", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Sox9 OE\n(n = 2,467)") + theme(legend.position = "none") + scale_fill_manual(values =  colpal6[1:5]) + theme(plot.title = element_text(hjust = 0.5))
+l4d <- g_legend(p4el)
+#p5dl + p5dr
+p4e <- grid.arrange(arrangeGrob(p4el + theme(legend.position="none"), p4er + theme(legend.position="none"), nrow=1), l4d, nrow=2, heights=unit(c(1.7, 0.3), c("in", "in")))
+p4e
+```
+
+```{r}
+ct_capy_preadip <- data.frame(table(preadips$celltag, preadips$capy_new_class_short))
+ct_capy_preadip$Var2 <- factor(ct_capy_preadip$Var2, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+p4hl <- ggplot(ct_capy_preadip[ct_capy_preadip$Var1 == "Ctrl", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + ggtitle("Control Preadipocytes\n(n = 365)")+ theme_void() + theme(legend.position="bottom", plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(values = colpal6)  #+ coord_flip()
+p4hm <- ggplot(ct_capy_preadip[ct_capy_preadip$Var1 == "Dpp4", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Control Progenitors\n(n = 266)") + scale_fill_manual(values = colpal6) + theme(plot.title = element_text(hjust = 0.5)) #+ coord_flip()
+p4hr <- ggplot(ct_capy_preadip[ct_capy_preadip$Var1 == "Sox9_OE", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Sox OE Preadipocytes\n(n = 538)") + scale_fill_manual(values = colpal6) + theme(plot.title = element_text(hjust = 0.5))#+ coord_flip()
+l4h <- g_legend(p4hl)
+p4h <- grid.arrange(p4hl + theme(legend.position="none"), p4hr + theme(legend.position="none"), p4hm + theme(legend.position="none"), nrow=1)
+p4h
+```
+
+### Compare Capy results to P32 naive data
+
+Processed and analyzed P32 naive data can be found on Figshare:
+
+https://figshare.com/s/b75e3e90389bf38c5524
+
+```{r load-data}
+p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
+```
+
+```{r}
+ct_capy_naive <- data.frame(table(p32$celltag, p32$capy_new_class_short))
+```
+
+```{r}
+ct_capy_prog$SoxOE <- "Yes"
+ct_capy_naive$SoxOE <- "No"
+ct_capy_prog$fraction <- ct_capy_prog$Freq / rep(table(progs$celltag), length(unique(ct_capy_prog$Var2)))
+ct_capy_naive$fraction <- ct_capy_naive$Freq / rep(table(p32$celltag), length(unique(ct_capy_naive$Var2)))
+ct_capy_prog_merge <- rbind(ct_capy_prog, ct_capy_naive)
+```
+
+```{r}
+ct_capy_prog_merge$Var2 <- factor(ct_capy_prog_merge$Var2, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+```
+
+```{r}
+p4f <- ggplot(ct_capy_prog_merge[ct_capy_prog_merge$Var1 %in% c("OE", "v2") & ct_capy_prog_merge$Var2 != "Unknown", ], aes(x = Var2, y = fraction, fill = SoxOE)) + geom_bar(stat = "identity", position = "dodge", color = "black") + theme_classic() + labs(x = "Cell type") + scale_fill_manual(values = c("#1C75BC", "#FFC33D"))
+p4f
+```
+
+```{r}
+ct_capy_preadip$SoxOE <- "Yes"
+ct_capy_preadip$fraction <- ct_capy_preadip$Freq / rep(table(preadips$celltag), length(unique(ct_capy_preadip$Var2)))
+ct_capy_preadip_merge <- rbind(ct_capy_preadip, ct_capy_naive)
+```
+
+```{r}
+ct_capy_preadip_merge$Var2 <- factor(ct_capy_preadip_merge$Var2, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+```
+
+```{r}
+p4i <- ggplot(ct_capy_preadip_merge[ct_capy_preadip_merge$Var1 %in% c("Sox9_OE", "v1") & ct_capy_preadip_merge$Var2 != "Unknown", ], aes(x = Var2, y = fraction, fill = SoxOE)) + geom_bar(stat = "identity", position = "dodge", color = "black") + theme_classic() + labs(x = "Cell type") + scale_fill_manual(values = c("#1C75BC", "#FFC33D"))
+p4i
+```
+
+### Project progs and preadips datasets onto P32 naive embedding
+
+```{r}
+p32_model <- RunUMAP(p32, dims = 1:10, return.model = TRUE)
+```
+
+```{r}
+p32.sox.prog.anchors <- FindTransferAnchors(reference = p32_model, query = progs,
+    dims = 1:30, reference.reduction = "pca")
+sox_prog_query <- MapQuery(anchorset = p32.sox.prog.anchors, reference = p32_model, query = progs,
+    refdata = list(celltype = "capy_new_class"), reference.reduction = "pca", reduction.model = "umap")
+```
+
+```{r}
+p32.sox.preadip.anchors <- FindTransferAnchors(reference = p32_model, query = preadips,
+    dims = 1:30, reference.reduction = "pca")
+sox_preadip_query <- MapQuery(anchorset = p32.sox.preadip.anchors, reference = p32_model, query = preadips,
+    refdata = list(celltype = "capy_new_class"), reference.reduction = "pca", reduction.model = "umap")
+```
+
+Re-orient embedding if necessary
+
+```{r}
+p32_model@reductions$umap_mod <- p32_model@reductions$umap
+p32_model@reductions$umap_mod@cell.embeddings[, "UMAP_2"] <- -1 * p32_model@reductions$umap_mod@cell.embeddings[, "UMAP_2"]
+sox_prog_query@reductions$ref.umap_mod <- sox_prog_query@reductions$ref.umap
+#colnames(sox_prog_query@reductions$ref.umapud@cell.embeddings) <- c("UMAP_1", "UMAP_2")
+sox_prog_query@reductions$ref.umap_mod@cell.embeddings[, "refUMAP_2"] <- -1 * sox_prog_query@reductions$ref.umap_mod@cell.embeddings[, "refUMAP_2"]
+sox_preadip_query@reductions$ref.umap_mod <- sox_preadip_query@reductions$ref.umap
+#colnames(sox_preadip_query@reductions$ref.umapud@cell.embeddings) <- c("UMAP_1", "UMAP_2")
+sox_preadip_query@reductions$ref.umap_mod@cell.embeddings[, "refUMAP_2"] <- -1 * sox_preadip_query@reductions$ref.umap_mod@cell.embeddings[, "refUMAP_2"]
+```
+
+```{r}
+s7al <- DimPlot(p32_model, reduction = "umap_mod", group.by = "capy_new_class", cols = colpal6) + ggtitle("Reference annotations") + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+s7am <- DimPlot(sox_prog_query, reduction = "ref.umap_mod", group.by = "predicted.celltype", cols = colpal6) + NoLegend() + ggtitle("Sox9 OE Progenitors,\nCellTagged controls, and host cells") + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+s7ar <- DimPlot(sox_preadip_query, reduction = "ref.umap_mod", group.by = "predicted.celltype", cols = colpal6) + NoLegend() + ggtitle("Sox9 OE Preadipocytes,\nCellTagged controls, and host cells") + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+ls7a <- g_legend(s7al)
+
+s7a <- grid.arrange(arrangeGrob(s7al + theme(legend.position="none"), s7am + theme(legend.position="none"), s7ar + theme(legend.position = "none"), nrow=1), ls7a, nrow=2, heights=unit(c(1.7, 0.3), c("in", "in")))
+s7a
+```
+
+```{r}
+s7b1 <- ggplot(as.data.frame(sox_prog_query@reductions$ref.umap@cell.embeddings[sox_prog_query$celltag == "OE", ]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "bottom")
+s7b2 <- ggplot(as.data.frame(sox_prog_query@reductions$ref.umap@cell.embeddings[sox_prog_query$celltag == "None", ]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none")
+s7b1 
+s7b2
+```
+
+```{r}
+s7c1 <- ggplot(as.data.frame(sox_preadip_query@reductions$ref.umap@cell.embeddings[sox_preadip_query$celltag == "Sox9_OE",]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "bottom")
+s7c2 <- ggplot(as.data.frame(sox_preadip_query@reductions$ref.umap@cell.embeddings[sox_preadip_query$celltag == "Dpp4",]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none")
+s7c3 <- ggplot(as.data.frame(sox_preadip_query@reductions$ref.umap@cell.embeddings[sox_preadip_query$celltag == "Ctrl",]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none")
+s7c4 <- ggplot(as.data.frame(sox_preadip_query@reductions$ref.umap@cell.embeddings[is.na(sox_preadip_query$celltag),]), aes(x = refUMAP_1, y = -1 * refUMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none")
+s7c1
+s7c2
+s7c3
+s7c4
+```
+
+Again, we have deposited our processed datasets on Figshare. They have been analyzed according to the code in this notebook: 
+
+Processed Sox9 over-expressed progenitors (experiment from Figure 4A) can be found here: https://figshare.com/s/c241b71c3d1ddf8e488a
+Processed Sox9 over-expressed preadipocytes (experiment from Figure 4G) can be found here: https://figshare.com/s/7ca3418390a66a69d2e0
