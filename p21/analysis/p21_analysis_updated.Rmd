@@ -1,0 +1,733 @@
+---
+title: "P21 Processed Data Analysis"
+author: "Emily Butka"
+date: "2023-07-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages}
+library(Seurat)
+library(dplyr)
+library(reshape2)
+#library(grid)
+library(ggplot2)
+library(RColorBrewer)
+```
+
+This notebook contains code used to analyze P21 data following alignment and quality control. Code for all panels from Figure 1 and Supplementary Figure 1 is outlined here.
+
+## Load processed data
+
+Raw data are processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/396c5f4ebd3c23d20094
+
+```{r load-data}
+p21 <- readRDS("~/Downloads/p21_processed.rds")
+```
+
+## Color palettes
+
+```{r}
+colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", "#008DF9", "#8400CD", "#00FCCF", "#FF5AAF", "#009F81", "gray")
+```
+
+```{r}
+colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
+```
+
+```{r}
+capy_ref_colpal <- c("#756BB1", "#E6550D", "#DE2D26", "#3182BD", "#31A354", "#FFC02D")
+```
+
+## Preliminary Plot
+
+```{r}
+p1b <- DimPlot(p21, label = T, label.size = 7, raster = F) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'))
+p1b
+```
+
+## Capybara with 5 published references
+
+```{r}
+all_capys <- rbind(data.frame(call = p21$capy_classification_merrick_etal), data.frame(call = p21$capy_phan), data.frame(call = p21$capy_jacob), data.frame(call = p21$capy_buechler_clustname), data.frame(call = p21$capy_burl))
+all_capys$X <- NULL
+all_capys$reference <- c(rep("Merrick", dim(p21)[2]), 
+                         rep("Phan", dim(p21)[2]),
+                         rep("Jacob", dim(p21)[2]),
+                         rep("Buechler", dim(p21)[2]),
+                         rep("Burl", dim(p21)[2]))
+```
+
+```{r}
+dfplot <- data.frame(table(all_capys$call, all_capys$reference))
+```
+
+```{r}
+ggplot(dfplot, aes(x = Var2, y = Freq / sum(Freq) * 5, fill = Var1)) + geom_col() + theme_classic()
+```
+
+### factor cell types
+
+```{r}
+# Collapse unassigned into unknown, remove unassigned
+dfplot$Freq[dfplot$Var2 == "Merrick" & dfplot$Var1 == "Unknown"] <- dfplot$Freq[dfplot$Var2 == "Merrick" & dfplot$Var1 == "Unassigned"]
+dfplot <- dfplot[which(dfplot$Var1 != "Unassigned"), ]
+```
+
+```{r}
+dfplot$Var1 <- gsub("_", " ", dfplot$Var1)
+dfplot$Var1 <- gsub(" cd142", "", dfplot$Var1)
+dfplot$Var1 <- gsub("group", "Group", dfplot$Var1)
+dfplot$Var1 <- gsub("\\.", " ", dfplot$Var1)
+```
+
+```{r}
+ggplot(dfplot, aes(x = Var2, y = Freq / sum(Freq) * 5, fill = Var1)) + geom_col() + theme_classic() + xlab("Reference") + ylab("Relative Abundance")
+```
+
+```{r}
+dfplot$Var1 <- factor(dfplot$Var1, levels = c("Ccl19", "Col15a1", "Comp", "Cxcl12", "Fbln1", "Hhip", "Npnt", "Pi16", "ASC1", "ASC2", "FIB Inter1", "FIB Inter2", "FIB Inter3", "MUSCLE Late", "VESSEL LECs", "adipocyte", "committed preadipocyte", "endothelial", "Group 3", "Group 4", "Group 5", "Group 6", "interstitial progenitor", "neural crest", "smooth muscle", "fibroblast", "keratinocyte", "lymphocyte blood", "pericytes", "Unknown", "Multi ID"))
+```
+
+```{r}
+s1b <- ggplot(dfplot, aes(x = Var2, y = Freq / sum(Freq) * 5, fill = Var1)) + geom_col() + theme_classic() + xlab("Reference") + ylab("Relative Abundance") + scale_fill_manual(name = "Cell type", values = c(brewer.pal(9, "Reds")[2:9], brewer.pal(3, "Blues")[2:3], brewer.pal(5, "Oranges"), brewer.pal(9, "Purples"), "#25006D", brewer.pal(5, "Greens")[2:5], "gray", "yellow")) #+ theme(legend.position = "none")
+s1b
+```
+
+## Capybara with consolidated reference
+
+```{r}
+dfplot <- data.frame(table(p21$capy_super_ref))
+dfplot$ident <- "P21"
+ggplot(dfplot, aes(x = ident, y = Freq / sum(Freq), fill = Var1)) + geom_col() + theme_classic() #+ theme(legend.position = "bottom")
+```
+
+```{r}
+identical(colnames(p21), super_ref_class$barcode)
+p21$capy_super_ref <- super_ref_class$call
+```
+
+```{r}
+super_ref_class$origin <- super_ref_class$call
+super_ref_class$origin[super_ref_class$origin %in% c("Ccl19", "Col15a1", "Comp", "Cxcl12", "Fbln1", "Hhip", "Npnt", "Pi16")] <- "Buechler"
+super_ref_class$origin[super_ref_class$origin %in% c("ASC1", "ASC2")] <- "Burl"
+super_ref_class$origin[super_ref_class$origin %in% c("FIB Inter1", "FIB Inter2", "FIB Inter3", "MUSCLE.Late", "VESSEL LECs")] <- "Jacob"
+super_ref_class$origin[super_ref_class$origin %in% c("adipocyte", "committed_preadipocyte", "endothelial", "group_3_cd142", "group_4", "group_5", "group_6", "interstitial_progenitor", "neural_crest", "smooth_muscle")] <- "Merrick"
+super_ref_class$origin[super_ref_class$origin %in% c("fibroblast", "keratinocyte", "lymphocyte blood", "pericytes")] <- "Phan"
+```
+
+```{r}
+dfplot <- data.frame(table(super_ref_class$origin))
+dfplot$ident <- "P21 Skin"
+dfplot$Var1 <- gsub("_", " ", dfplot$Var1)
+dfplot$Var1 <- factor(dfplot$Var1, levels = c("Merrick", "Jacob", "Burl", "Buechler", "Phan", "Multi ID"))
+```
+
+```{r}
+p1c <- ggplot(dfplot, aes(x = ident, y = Freq / sum(Freq), fill = Var1)) + geom_col() + theme_classic() + scale_fill_manual(name = "Dataset of origin of\nCapybara\nclassification", values = capy_ref_colpal) + theme(axis.title.x = element_blank(), axis.line.x = element_blank()) + ylab("Relative abundance")
+p1c
+```
+
+### Nearest neighbors analysis
+
+P1D
+
+### Hybrids analysis
+
+```{r}
+super_ref_hybrid <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/23_08_28_capy_ref_comparisons/23_11_03_super_ref_on_p21_hybrids.csv")
+rownames(super_ref_hybrid) <- super_ref_hybrid$x
+```
+
+```{r}
+celltypes <- c()
+for(i in super_ref_hybrid$hybrid) {
+  types <- strsplit(i, "-")
+  if(!(types[[1]][1] %in% celltypes)) {
+    celltypes <- c(celltypes, types[[1]][1])
+  }
+  if(!(types[[1]][2] %in% celltypes)) {
+    celltypes <- c(celltypes, types[[1]][2])
+  }
+}
+  
+```
+
+```{r}
+hybrid_ids <- data.frame(matrix(rep(0, length(celltypes)^2), nrow = length(celltypes)))
+colnames(hybrid_ids) <- celltypes
+rownames(hybrid_ids) <- colnames(hybrid_ids)
+```
+
+```{r}
+hybrids_table <- data.frame(table(super_ref_hybrid$hybrid))
+```
+
+```{r}
+count <- 0
+cellscount <- 0
+for(i in 1:dim(hybrids_table)[1]) {
+  types <- strsplit(as.character(hybrids_table$Var1[i]), "-")
+  if(length(types[[1]]) == 2) {
+    hybrid_ids[types[[1]][1], types[[1]][2]] <- hybrid_ids[types[[1]][1], types[[1]][2]] + hybrids_table$Freq[i]
+  }
+  else {
+    count <- count + 1
+    cellscount <- cellscount + hybrids_table$Freq[i]
+  }
+}
+print(count)
+print(cellscount)
+hybrid_ids <- reshape2::melt(hybrid_ids)
+hybrid_ids$variable2 <- rep(unique(hybrid_ids$variable), length(celltypes))
+
+```
+
+```{r}
+ggplot(hybrid_ids, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value / sum(hybrid_ids$value)))) + geom_point(aes(color = variable)) +
+  scale_size_area(name = "Fraction of hybrids", max_size=6) +
+  guides(fill = FALSE, color = FALSE) +
+  theme(legend.position = "bottom",
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+
+```
+
+```{r}
+hybrid_ids$variable_origin <- hybrid_ids$variable
+hybrid_ids$variable_origin <- as.character(hybrid_ids$variable_origin)
+hybrid_ids$variable_origin[hybrid_ids$variable_origin %in% c("Ccl19", "Col15a1", "Comp", "Cxcl12", "Fbln1", "Hhip", "Npnt", "Pi16")] <- "Buechler"
+hybrid_ids$variable_origin[hybrid_ids$variable_origin %in% c("ASC1", "ASC2")] <- "Burl"
+hybrid_ids$variable_origin[hybrid_ids$variable_origin %in% c("FIB Inter1", "FIB Inter2", "FIB Inter3", "MUSCLE.Late", "VESSEL LECs", "EPI.Periderm")] <- "Jacob"
+hybrid_ids$variable_origin[hybrid_ids$variable_origin %in% c("adipocyte", "committed_preadipocyte", "endothelial", "group_3_cd142", "group_4", "group_5", "group_6", "interstitial_progenitor", "neural_crest", "smooth_muscle")] <- "Merrick"
+hybrid_ids$variable_origin[hybrid_ids$variable_origin %in% c("fibroblast", "keratinocyte", "lymphocyte blood", "pericytes")] <- "Phan"
+```
+
+```{r}
+hybrid_ids$variable_origin2 <- hybrid_ids$variable2
+hybrid_ids$variable_origin2 <- as.character(hybrid_ids$variable_origin2)
+hybrid_ids$variable_origin2[hybrid_ids$variable_origin2 %in% c("Ccl19", "Col15a1", "Comp", "Cxcl12", "Fbln1", "Hhip", "Npnt", "Pi16")] <- "Buechler"
+hybrid_ids$variable_origin2[hybrid_ids$variable_origin2 %in% c("ASC1", "ASC2")] <- "Burl"
+hybrid_ids$variable_origin2[hybrid_ids$variable_origin2 %in% c("FIB Inter1", "FIB Inter2", "FIB Inter3", "MUSCLE.Late", "VESSEL LECs", "EPI.Periderm")] <- "Jacob"
+hybrid_ids$variable_origin2[hybrid_ids$variable_origin2 %in% c("adipocyte", "committed_preadipocyte", "endothelial", "group_3_cd142", "group_4", "group_5", "group_6", "interstitial_progenitor", "neural_crest", "smooth_muscle")] <- "Merrick"
+hybrid_ids$variable_origin2[hybrid_ids$variable_origin2 %in% c("fibroblast", "keratinocyte", "lymphocyte blood", "pericytes")] <- "Phan"
+```
+
+```{r}
+hybrid_ids_origin <- aggregate(value~variable_origin+variable_origin2,data=hybrid_ids,FUN=sum)
+```
+
+```{r}
+hybrid_ids_origin$variable_origin <- factor(hybrid_ids_origin$variable_origin, levels = c("Merrick", "Jacob", "Burl", "Buechler", "Phan"))
+hybrid_ids_origin$variable_origin2 <- factor(hybrid_ids_origin$variable_origin2, levels = c("Merrick", "Jacob", "Burl", "Buechler", "Phan"))
+```
+
+```{r}
+s1c <- ggplot(hybrid_ids_origin, aes(x=variable_origin, y=variable_origin2, size=ifelse(value==0, NA,  value / sum(hybrid_ids_origin$value)))) + geom_point(aes(color = variable_origin)) +
+  scale_size_area(name = "Fraction of hybrids", max_size=6) +
+  guides(fill = "legend", color = FALSE) +
+  theme(legend.position = "bottom",
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + scale_color_manual(values = capy_ref_colpal)
+s1c
+```
+
+## Capybara with Merrick, et al reference
+
+### Download and process Merrick, et al dataset from GEO to recapitulate cell types as defined by authors (GEO accession GSE128889; GSM3717977)
+
+```{r}
+Merrick_etal.data <- Read10X(data.dir = "~/Downloads/GSE128889/GSM3717977/") # this directory to contain 3 files: GSM3717977_SCmurinep12_barcodes.tsv.gz, GSM3717977_SCmurinep12_genes.tsv.gz, GSM3717977_SCmurinep12_matrix.mtx.gz
+merrick_p12 <- CreateSeuratObject(counts = Merrick_etal.data, min.cells = 3, min.features = 200, project = "Seale_P12")
+merrick_p12[["percent.mt"]] <- PercentageFeatureSet(object = merrick_p12, pattern = "^mt-")
+merrick_p12 <- subset(x = merrick_p12, subset = nFeature_RNA > 200 & nFeature_RNA < 3600 & percent.mt < 7)
+merrick_p12 <- NormalizeData(object = merrick_p12, normalization.method = "LogNormalize", scale.factor = 10000)
+merrick_p12 <- FindVariableFeatures(object = merrick_p12, selection.method = "vst", nfeatures = 2000)
+merrick_p12 <- ScaleData(object = merrick_p12, features = rownames(x = merrick_p12))
+merrick_p12 <- RunPCA(object = merrick_p12, features = VariableFeatures(object = merrick_p12))
+merrick_p12 <- JackStraw(object = merrick_p12, num.replicate = 100)
+merrick_p12 <- ScoreJackStraw(object = merrick_p12, dims = 1:20)
+JackStrawPlot(object = merrick_p12, dims = 1:20)
+```
+
+```{r}
+ElbowPlot(object = merrick_p12)
+```
+
+```{r}
+merrick_p12 <- FindNeighbors(object = merrick_p12, dims = 1:20)
+merrick_p12 <- FindClusters(object = merrick_p12, resolution = 0.6)
+merrick_p12 <- RunUMAP(object = merrick_p12, dims = 1:15)
+```
+
+```{r}
+# find markers for every cluster compared to all remaining cells, report only the positive ones
+merrick_p12.markers <- FindAllMarkers(object = merrick_p12, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+merrick_p12.markers %>% group_by(cluster) %>% top_n(n = 40, wt = avg_log2FC)
+```
+
+We have deposited our processed data from Merrick, et al here, for downstream analysis: https://figshare.com/s/224f9152394137f8c46d
+
+```{r}
+merrick_p12 <- readRDS("~/Downloads/merrick_etal_processed.rds")
+```
+
+### Merrick et al. prelim plots
+
+```{r}
+sm1a <- DimPlot(merrick_p12, label = T, label.size = 7) + NoLegend() + theme(axis.title = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.text = element_blank())
+sm1c
+```
+
+```{r}
+sm1b <- VlnPlot(object = merrick_p12, features = c("Dpp4", "Wnt2", "Akr1c18", "Anxa3", "Sema3c", "Icam1", "Dlk1", "Fabp4", "Pparg", "Ggt5", "Cd9", "Egfl6", "Emb", "F3", "Fmo2", "Gdf10", "Ifitm1", "Thbs4", "Plxdc1", "Adipoq", "Cd36", "Plin1", "Pecam1", "Acta2", "Mpz"), stack = T, flip = T) + NoLegend()
+sm1b
+```
+
+### Run Capybara using custom reference with cell types as defined above 
+
+Code and workflow described at https://github.com/morris-lab/Capybara. We did not perform tissue-level classification (Step 1); rather, a high-resolution custom reference was generated and continuous identity measured (Step 2) followed by discrete cell type classification and multiple identity scoring (Step 3).
+
+Custom code to extract hybrid IDs and mean p-values for assignments is as follows, using data frames `bin.count` and `perc.list` described in Capybara workflow:
+
+```{r}
+# hybrids
+bin.count.rowsums <- apply(bin.count, 1, sum)
+rownames(bin.count)[which(bin.count.rowsums > 1)]
+bin.count.greaterthan1 <- apply(bin.count[which(bin.count.rowsums > 1), ], c(1, 2), function(x) {x > 0})
+multi.celltypes <- apply(bin.count.greaterthan1, 1, function(x) {print(colnames(bin.count.greaterthan1)[x])})
+
+hybrids <- c()
+for(i in 1:length(multi.celltypes)) {
+  #print(multi.celltypes[i])
+  hybrids <- c(hybrids, paste(multi.celltypes[[i]], collapse = "-"))
+}
+
+hybrids <- gsub("frxn_cell.type_", "", hybrids)
+
+# p-values for classifications
+pval_avg_mat <- data.frame()
+for(i in 1:length(perc.list)) {
+  pval_avg_mat <- rbind(pval_avg_mat, apply(perc.list[[i]][[1]], 2, mean))
+  rownames(pval_avg_mat)[i] <- names(perc.list[[i]])
+}
+colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
+```
+
+Classifications, hybrids, p-values, and identity fractions imported to p21 Seurat object as `capy_classification_merrick_etal`, `capy_hybrid_merrick_etal`, `pval_cell.type_xxx_merrick`, and `frxn_cell.type_xxx_merrick`, respectively. This information is stored in `p21_processed.rds` on Figshare.
+
+### Figures and visualizations of Capybara data
+
+```{r}
+p1el <- DimPlot(p21, group.by = "capy_classification_merrick_etal", pt.size = 1) + scale_color_manual(labels = c("Adipocyte", "Committed preadipocyte", "Endothelial", "Group 3", "Group 4", "Group 5", "Group 6", "Interstitial progenitor", "Multi ID", "Neural crest", "Smooth muscle", "Unassigned"), values = colpal12) + theme(plot.title = element_blank(), axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), legend.position = "bottom", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.margin = margin(0, 0, 0, 0))
+p1el + NoLegend()
+```
+
+```{r}
+skin_inguinal_celltypes <- data.frame(table(c(rep("P21 Skin", dim(p21)[2]), rep("P12 Inguinal", dim(merrick_p12)[2])), c(p21$capy_classification_merrick_etal, merrick_p12$merrick_class)))
+skin_inguinal_celltypes$IDs_best <- skin_inguinal_celltypes$Var2
+```
+
+```{r}
+skin_inguinal_celltypes$IDs_best <- gsub("adipocyte", "Adipocyte", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("committed_preAdipocyte", "Committed preadipocyte", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("endothelial", "Endothelial", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_3_cd142", "Group 3 (Cd142+)", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_4", "Group 4 (Wnt6+)", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_5", "Group 5", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("group_6", "Group 6", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("interstitial_progenitor", "Interstitial progenitor", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("Multi_ID", "Multi ID", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("neural_crest", "Neural crest", skin_inguinal_celltypes$IDs_best)
+skin_inguinal_celltypes$IDs_best <- gsub("smooth_muscle", "Smooth muscle", skin_inguinal_celltypes$IDs_best)
+```
+
+```{r}
+p1er <- ggplot(skin_inguinal_celltypes, aes(x = Var1, y = Freq, fill = IDs_best)) + geom_col(position = "fill", width = 0.9) + theme(axis.line.y = element_line(), axis.title.y = element_blank(), panel.background = element_blank(), strip.background = element_blank(), legend.position = "none", text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0)) + scale_fill_manual(name = "Cell type", values = colpal12) + labs(x = "Tissue")
+p1er
+```
+
+### Compare calls to consolidated reference
+
+```{r}
+merrick_compare <- data.frame(og = p21$capy_classification_merrick_etal, super = super_ref_class$call)
+merrick_compare <- data.frame(table(merrick_compare$og, merrick_compare$super))
+merrick_compare$Var1 <- as.character(merrick_compare$Var1)
+merrick_compare$Var2 <- as.character(merrick_compare$Var2)
+```
+
+```{r}
+merrick_compare[which(merrick_compare$Var1 == merrick_compare$Var2),]
+```
+
+```{r}
+merrick_compare[which(merrick_compare$Var1 != merrick_compare$Var2), ]
+```
+
+```{r}
+for(i in names(table(merrick_compare$Var1))) {
+  print(paste0("cells lost from original ", i, " cell type: ", sum(merrick_compare$Freq[which(merrick_compare$Var1 == i)]) - merrick_compare$Freq[which(merrick_compare$Var1 == i & merrick_compare$Var2 == i)]))
+}
+
+```
+
+
+```{r}
+merrick_compare_mod <- merrick_compare[which(merrick_compare$Var1 == merrick_compare$Var2),]
+merrick_compare_mod$Var2 <- NULL
+merrick_compare_mod$instance <- "5 references"
+merrick_compare_mod$Freq_norm <- merrick_compare_mod$Freq / sum(merrick_compare$Freq)
+```
+
+
+```{r}
+merrick_plot <- data.frame(table(p21$capy_classification_merrick_etal))
+merrick_plot$instance <- "Merrick reference only"
+merrick_plot$Freq_norm <- merrick_plot$Freq / sum(merrick_plot$Freq)
+merrick_plot <- rbind(merrick_plot, merrick_compare_mod)
+```
+
+```{r}
+colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", "#008DF9", "#8400CD", "#00FCCF", "#FF5AAF", "#009F81", "gray")
+```
+
+```{r}
+merrick_plot$instance <- factor(merrick_plot$instance, levels = c("Merrick reference only", "5 references"))
+```
+
+```{r}
+ggplot(merrick_plot, aes(x = instance, y = Freq_norm, fill = Var1)) + geom_col() + theme_classic() + xlab("Instance") + ylab("Relative Abundance") + scale_fill_manual(name = "Cell type", values = colpal12)
+```
+
+```{r}
+merrick_plot$Var1 <- as.character(merrick_plot$Var1)
+merrick_plot <- rbind(merrick_plot, c("Other", 2201, "5 references", 2201/14478))
+merrick_plot$Var1 <- factor(merrick_plot$Var1, levels = c("Other", "adipocyte", "committed_preadipocyte", "endothelial", "group_3_cd142", "group_4", "group_5", "group_6", "interstitial_progenitor", "Multi_ID", "neural_crest", "smooth_muscle", "Unassigned"))
+merrick_plot$instance <- factor(merrick_plot$instance, levels = c("Merrick reference only", "5 references"))
+merrick_plot$Freq_norm <- as.double(merrick_plot$Freq_norm)
+```
+
+```{r}
+s1d <- ggplot(merrick_plot, aes(x = instance, y = Freq_norm, fill = Var1)) + geom_col() + theme_classic() + xlab("Instance") + ylab("Relative Abundance") + scale_fill_manual(name = "Cell type", values = c("darkgray", colpal12)) + theme(legend.position = "none")
+s1d
+```
+
+### Hybrid cells
+
+```{r}
+s1f <- DimPlot(p21, cells.highlight = colnames(p21)[which(p21$capy_classification_merrick_etal == "Multi_ID")]) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank(), legend.position = "none")
+s1f
+```
+
+```{r}
+hybrid_ids <- data.frame(adipocyte = rep(0, 10), 
+                         committed_preadipocyte = rep(0, 10), 
+                         endothelial = rep(0, 10), 
+                         group_3_cd142 = rep(0, 10),
+                         group_4 = rep(0, 10),
+                         group_5 = rep(0, 10),
+                         group_6 = rep(0, 10),
+                         interstitial_progenitor = rep(0, 10),
+                         neural_crest = rep(0, 10),
+                         smooth_muscle = rep(0, 10))
+rownames(hybrid_ids) <- colnames(hybrid_ids)
+```
+
+```{r}
+hybrids_table <- data.frame(table(p21$capy_hybrid_merrick_etal))
+```
+
+```{r}
+count <- 0
+cellscount <- 0
+for(i in 1:dim(hybrids_table)[1]) {
+  types <- strsplit(as.character(hybrids_table$Var1[i]), "-")
+  if(length(types[[1]]) == 2) {
+    hybrid_ids[types[[1]][1], types[[1]][2]] <- hybrid_ids[types[[1]][1], types[[1]][2]] + hybrids_table$Freq[i]
+  }
+  else {
+    count <- count + 1
+    cellscount <- cellscount + hybrids_table$Freq[i]
+  }
+}
+print(count)
+print(cellscount)
+hybrid_ids <- reshape2::melt(hybrid_ids)
+hybrid_ids$variable2 <- rep(unique(hybrid_ids$variable), 10)
+```
+
+```{r}
+ggplot(hybrid_ids, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value / sum(hybrid_ids$value)))) + geom_point(aes(color = variable)) +
+  #scale_color_manual(values = colpal12[c(8, 4, 5, 6, 7, 2, 1)]) +
+  scale_size_area(name = "Fraction of adipocyte lineage hybrids", max_size=6) +
+  guides(fill = FALSE, color = FALSE) +
+  theme(legend.position = "bottom",
+        #text = element_text(size = 8),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        #title = element_text(size = 8),
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+
+
+We subsetted hybrids to visualize only adipose cell type hybrids, as well as re-ordered this table for plotting. This file can be found on GitHub:
+
+```{r}
+hybrid_ids_reordered <- read.csv("./hybrid_ids_reordered_capy_merrick_for_plotting_fig1.csv")
+
+hybrid_ids_reordered_sub <- hybrid_ids_reordered[hybrid_ids_reordered$variable %in% c("Interstitial progenitor", "Committed preadipocyte", "Group 3", "Adipocyte", "Group 5", "Group 4", "Group 6") & hybrid_ids_reordered$variable2 %in% c("Interstitial progenitor", "Committed preadipocyte", "Group 3", "Group 4", "Group 5", "Group 6"), ]
+```
+
+```{r}
+hybrid_ids_reordered_sub$variable <- gsub("Interstitial progenitor", "Interstitial\nprogenitor", hybrid_ids_reordered_sub$variable)
+hybrid_ids_reordered_sub$variable <- gsub("Committed preadipocyte", "Committed\npreadipocyte", hybrid_ids_reordered_sub$variable)
+hybrid_ids_reordered_sub$variable <- factor(hybrid_ids_reordered_sub$variable, levels = c("Interstitial\nprogenitor", "Group 3", "Group 4", "Group 5", "Group 6", "Committed\npreadipocyte", "Adipocyte"))
+hybrid_ids_reordered_sub$variable2 <- gsub("Interstitial progenitor", "Interstitial\nprogenitor", hybrid_ids_reordered_sub$variable2)
+hybrid_ids_reordered_sub$variable2 <- gsub("Committed preadipocyte", "Committed\npreadipocyte", hybrid_ids_reordered_sub$variable2)
+hybrid_ids_reordered_sub$variable2 <- factor(hybrid_ids_reordered_sub$variable2, levels = c("Interstitial\nprogenitor", "Group 3", "Group 4", "Group 5", "Group 6", "Committed\npreadipocyte", "Adipocyte"))
+```
+
+
+```{r}
+s1g <- ggplot(hybrid_ids_reordered_sub, aes(x=variable, y=variable2, size=ifelse(value==0, NA,  value / sum(hybrid_ids_reordered_sub$value)))) + geom_point(aes(color = variable)) +
+  scale_color_manual(values = colpal12[c(8, 4, 5, 6, 7, 2, 1)]) +
+  scale_size_area(name = "Fraction of adipocyte lineage hybrids", max_size=6) +
+  guides(fill = FALSE, color = FALSE) +
+  theme(legend.position = "bottom",
+        #text = element_text(size = 8),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        #title = element_text(size = 8),
+        legend.key=element_blank(),
+        legend.box.spacing = unit(0, "in"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1), axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+s1g
+```
+
+## New proposed classification strategy and visualization
+
+```{r}
+p21$new_classification <- NA
+p21$new_classification[p21$seurat_clusters %in% c(0, 1, 2, 4, 5, 6, 10)] <- "Interstitial progenitor"
+p21$new_classification[p21$seurat_clusters == 7] <- "Committed preadipocyte"
+p21$new_classification[p21$seurat_clusters %in% c(3, 7, 8, 11) & p21$capy_classification_merrick_etal == "interstitial_progenitor"] <- "Transitioning interstitial progenitor"
+p21$new_classification[colnames(preadips)[preadips$seurat_clusters %in% c(0, 1, 7, 8)]] <- "Immature preadipocyte"
+```
+
+```{r}
+p21$new_classification_short <- gsub("Interstitial progenitor", "Prog", p21$new_classification)
+p21$new_classification_short <- gsub("Transitioning interstitial progenitor", "Trans prog", p21$new_classification_short)
+p21$new_classification_short <- gsub("Immature preadipocyte", "Imm preadip", p21$new_classification_short)
+p21$new_classification_short <- gsub("Committed preadipocyte", "Comm preadip", p21$new_classification_short)
+p21$new_classification <- factor(p21$new_classification, levels = c("Interstitial progenitor", "Transitioning interstitial progenitor", "Immature preadipocyte", "Committed preadipocyte"))
+p21$new_classification_short <- factor(p21$new_classification_short, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip"))
+```
+
+```{r}
+p1f <- DimPlot(p21, group.by = "new_classification", cols = colpal6[1:4]) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank(), legend.position = "bottom")
+p1f
+```
+
+
+
+```{r}
+p1gl <- VlnPlot(p21, features = "Dpp4", group.by = "new_classification_short", pt.size = 0, cols = colpal6[1:4]) + stat_summary(fun = mean, geom='point', size = 3, colour = "black") + NoLegend()
+p1gl
+p1gm <- VlnPlot(p21, features = "Cd9", group.by = "new_classification_short", pt.size = 0, cols = colpal6[1:4]) + stat_summary(fun = mean, geom='point', size = 3, colour = "black") + NoLegend()
+p1gm
+p1gr <- VlnPlot(p21, features = "F3", group.by = "new_classification_short", pt.size = 0, cols = colpal6[1:4]) + stat_summary(fun = mean, geom='point', size = 3, colour = "black") + NoLegend()
+p1gr
+```
+
+
+```{r}
+frxns_p21 <- p21@meta.data[, grep('frxn', colnames(p21@meta.data))]
+```
+
+```{r}
+frxns_p21$cell_name <- rownames(p21@meta.data)
+rownames(frxns_p21) <- frxns_p21$cell_name
+frxns_p21$call <- p21$capy_classification_merrick_etal
+frxns_p21 <- reshape2::melt(frxns_p21)
+table(frxns_p21$value < 0)
+frxns_p21$value[frxns_p21$value < 0] <- 0
+```
+
+```{r}
+frxns_p21$value_norm <- apply(frxns_p21, 1, function(x) { as.double(x[4]) / sum(frxns_p21$value[frxns_p21$cell_name == x[1]]) })
+order_new <- frxns_p21$cell_name[order(frxns_p21[frxns_p21$variable == "frxn_cell.type_interstitial_progenitor_merrick", "value_norm"], decreasing = T)]
+frxns_p21$variable <- factor(frxns_p21$variable)
+frxns_p21$cell_name <- factor(frxns_p21$cell_name, levels = order_new)
+
+```
+
+```{r}
+s1it <- ggplot(frxns_p21, aes(x = cell_name, y = value_norm, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = colpal12) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank()) + labs(y = "Fractional cell type composition")
+s1it
+```
+
+```{r}
+s1im <- ggplot(frxns_p21, aes(x = cell_name, fill = call)) + geom_bar() + scale_fill_manual(values = colpal12) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank())
+s1im
+```
+
+```{r}
+p21_new_class_order_new <- data.frame(cell_name = colnames(p21), new_call = p21$new_classification)
+p21_new_class_order_new$cell_name <- factor(p21_new_class_order_new$cell_name, levels = order_new)
+```
+
+```{r}
+s1ib <- ggplot(p21_new_class_order_new, aes(x = cell_name, fill = new_call)) + geom_bar() + scale_fill_manual(values = colpal6) + theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank())
+s1ib
+```
+
+```{r}
+s1i <- grid.arrange(s1jt, s1jm, s1jb, nrow = 3, heights = unit(c(2, 0.5, 0.5), c("in", "in", "in")))
+s1i
+```
+
+We have deposited our whole processed P21 dataset on Figshare. It has been analyzed according to the code in this notebook: 
+https://figshare.com/s/396c5f4ebd3c23d20094
+
+## Additional feature plots
+
+```{r}
+p1h1 <- FeaturePlot(p21, features = "Akr1c18", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h2 <- FeaturePlot(p21, features = "Smpd3", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h3 <- FeaturePlot(p21, features = "Gap43", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h4 <- FeaturePlot(p21, features = "Dpp4", cols = c("lightgrey", "#211E71"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h1
+p1h2
+p1h3
+p1h4
+```
+
+```{r}
+p1h5 <- FeaturePlot(p21, features = "Mfap4", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h6 <- FeaturePlot(p21, features = "Igfbp7", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h7 <- FeaturePlot(p21, features = "Igf1", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.ticks = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h8 <- FeaturePlot(p21, features = "Cd9", cols = c("lightgrey", "#741112"), order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+p1h5
+p1h6
+p1h7
+p1h8
+```
+
+```{r}
+s1al <- FeaturePlot(p21, features = "Fabp4")
+s1ar <- FeaturePlot(p21, features = "Pparg")
+s1al
+s1ar
+```
+
+```{r}
+s1b <- VlnPlot(p21, features = "F3", pt.size = 0) + NoLegend() + xlab("Cluster")
+s1b
+```
+
+## Supp 1 panels:
+
+```{r}
+s1e <- VlnPlot(p21, features = "F3", pt.size = 0) + NoLegend() + theme(plot.title = element_blank())
+s1e
+```
+
+```{r}
+s1jl <- FeaturePlot(p21, features = "Fabp4", order = TRUE) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank())
+s1jl
+```
+
+```{r}
+s1jr <- FeaturePlot(p21, features = "Pparg", order = TRUE) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank())
+s1jr
+```
+
+
+
+
+
+
+
+
+
+F3 fig 1 stats
+
+```{r}
+t.test(adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Interstitial progenitor")],
+       adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Transitioning interstitial progenitor")])
+```
+
+```{r}
+t.test(adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Immature preadipocyte")],
+       adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Transitioning interstitial progenitor")])
+```
+
+```{r}
+t.test(adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Immature preadipocyte")],
+       adi0906@assays$RNA@data["F3", which(adi0906$new_classification == "Committed preadipocyte")])
+```

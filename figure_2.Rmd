@@ -1,0 +1,309 @@
+---
+title: "QPCR Data - Figure 2"
+author: "Emily Butka"
+date: "2024-06-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load data
+
+```{r}
+ProgPreadipGenes <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/data_from_carolynn/Figure 2-selected/APC validation plate 1_data.csv")
+```
+
+```{r}
+F3posF3neg <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/data_from_carolynn/Figure 2-selected/F3pos_F3neg_3_10_23_CEG_data_processed.csv")
+```
+
+```{r}
+Preadipocytes <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/data_from_carolynn/Figure 2-selected/CD26_ABC_CD9_ABC_F3_AB_6_15_21_data.csv")
+```
+
+## Generate plots
+
+```{r}
+ProgPreadipGenes <- ProgPreadipGenes[ProgPreadipGenes$Cell_Type %in% c("CD26", "CD9"), ]
+```
+
+```{r}
+ProgPreadipGenes$Gene <- factor(ProgPreadipGenes$Gene, levels = c("Akr1c18", "Smpd3", "Gap43", "Dpp4", "Mfap4", "Igfbp7", "Igf1", "Cd9"))
+```
+
+```{r}
+p2b <- ggplot(ProgPreadipGenes, aes(x=Gene, y=Mean, fill=Cell_Type)) +
+  geom_bar(stat="identity", color="black", position=position_dodge()) +
+  scale_fill_manual(values=c("#211E71", "#741112")) +
+  geom_errorbar(aes(ymin=Mean-Stdev, ymax=Mean+Stdev),
+                width=.2, position=position_dodge(.9)) +
+  theme_classic() +
+  theme(text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0)) +
+  labs("", y = "Fold change")
+p2b
+```
+
+Two sample t test
+
+```{r}
+# m1, m2: the sample means
+# s1, s2: the sample standard deviations
+# n1, n2: the same sizes
+# m0: the null value for the difference in means to be tested for. Default is 0. 
+# equal.variance: whether or not to assume equal variance. Default is FALSE. 
+t.test2 <- function(m1,m2,s1,s2,n1,n2,m0=0,equal.variance=FALSE)
+{
+    if( equal.variance==FALSE ) 
+    {
+        se <- sqrt( (s1^2/n1) + (s2^2/n2) )
+        # welch-satterthwaite df
+        df <- ( (s1^2/n1 + s2^2/n2)^2 )/( (s1^2/n1)^2/(n1-1) + (s2^2/n2)^2/(n2-1) )
+    } else
+    {
+        # pooled standard deviation, scaled by the sample sizes
+        se <- sqrt( (1/n1 + 1/n2) * ((n1-1)*s1^2 + (n2-1)*s2^2)/(n1+n2-2) ) 
+        df <- n1+n2-2
+    }      
+    t <- (m1-m2-m0)/se 
+    dat <- c(m1-m2, se, t, 2*pt(-abs(t),df))    
+    names(dat) <- c("Difference of means", "Std Error", "t", "p-value")
+    return(dat) 
+}
+
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Akr1c18")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Akr1c18")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Akr1c18")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Akr1c18")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Smpd3")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Smpd3")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Smpd3")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Smpd3")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Gap43")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Gap43")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Gap43")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Gap43")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Dpp4")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Dpp4")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Dpp4")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Dpp4")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Mfap4")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Mfap4")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Mfap4")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Mfap4")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Igfbp7")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Igfbp7")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Igfbp7")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Igfbp7")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Igf1")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Igf1")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Igf1")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Igf1")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Cd9")], 
+        ProgPreadipGenes$Mean[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Cd9")],
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD26" & ProgPreadipGenes$Gene == "Cd9")], 
+        ProgPreadipGenes$Stdev[which(ProgPreadipGenes$Cell_Type == "CD9" & ProgPreadipGenes$Gene == "Cd9")],
+        3,
+        3)
+```
+
+
+```{r}
+p2c <- ggplot(F3posF3neg, aes(x=Gene, y=Mean, fill=F3)) +
+  geom_bar(stat="identity", color="black", position=position_dodge()) +
+   scale_fill_manual(values=c("#9F0162","#FFB2FD")) +
+  geom_errorbar(aes(ymin=Mean-Stdev, ymax=Mean+Stdev),
+                width=.2, position=position_dodge(.9)) +
+  theme_classic() +
+  labs(x = "F3 positive markers", y = "Fold change")
+p2c
+```
+
+Stats:
+
+```{r}
+t.test2(F3posF3neg$Mean[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Eln")], 
+        F3posF3neg$Mean[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Eln")],
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Eln")], 
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Eln")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(F3posF3neg$Mean[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Igf1")], 
+        F3posF3neg$Mean[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Igf1")],
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Igf1")], 
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Igf1")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(F3posF3neg$Mean[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Lox")], 
+        F3posF3neg$Mean[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Lox")],
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Lox")], 
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Lox")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(F3posF3neg$Mean[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Smoc2")], 
+        F3posF3neg$Mean[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Smoc2")],
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Positive" & F3posF3neg$Gene == "Smoc2")], 
+        F3posF3neg$Stdev[which(F3posF3neg$F3 == "Negative" & F3posF3neg$Gene == "Smoc2")],
+        3,
+        3)
+```
+
+
+```{r}
+Preadipocytes$Cell_Type <- gsub("DPP4\\+", "Progenitors", Preadipocytes$Cell_Type)
+Preadipocytes$Cell_Type <- gsub("CD9\\+", "Immature Preadipocytes", Preadipocytes$Cell_Type)
+Preadipocytes$Cell_Type <- gsub("CD142\\+", "Committed Preadipocytes", Preadipocytes$Cell_Type)
+```
+
+```{r}
+Preadipocytes$APC_Type <- rep(c("Progenitors", "Preadipocytes", "Preadipocytes"), 3)
+Preadipocytes$Cell_Type <- factor(Preadipocytes$Cell_Type, levels = c("Progenitors", "Immature Preadipocytes", "Committed Preadipocytes"))
+```
+
+```{r}
+p2d_left <- ggplot(Preadipocytes[Preadipocytes$Gene=="Pparg",], aes(x=Cell_Type, y=Mean, fill=APC_Type)) +
+ geom_bar(stat="identity", color="black", position=position_dodge()) +
+  scale_fill_manual(values=c("#741112","#211E71")) +
+  geom_errorbar(aes(ymin=Mean-Stdev, ymax=Mean+Stdev),
+                width=.2, position=position_dodge(.9)) +
+  theme_classic() +
+  theme(text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0)) +
+  labs(x = "", y = "Fold change")
+p2d_left
+```
+
+```{r}
+p2d_middle <- ggplot(Preadipocytes[Preadipocytes$Gene=="Adipoq",], aes(x=Cell_Type, y=Mean, fill=APC_Type)) +
+  geom_bar(stat="identity", color="black", position=position_dodge()) +
+  scale_fill_manual(values=c("#741112","#211E71")) +
+  geom_errorbar(aes(ymin=Mean-Stdev, ymax=Mean+Stdev),
+                width=.2, position=position_dodge(.9)) +
+  theme_classic() +
+  theme(text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0)) +
+  labs(x = "", y = "Fold change")
+p2d_middle
+```
+
+```{r}
+p2d_right <- ggplot(Preadipocytes[Preadipocytes$Gene=="Plin1",], aes(x=Cell_Type, y=Mean, fill=APC_Type)) +
+  geom_bar(stat="identity", color="black", position=position_dodge()) +
+  scale_fill_manual(values=c("#741112","#211E71")) +
+  geom_errorbar(aes(ymin=Mean-Stdev, ymax=Mean+Stdev),
+                width=.2, position=position_dodge(.9)) +
+  theme_classic() +
+  theme(text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0)) +
+  labs(x = "", y = "Fold change")
+p2d_right
+```
+
+Stats:
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Plin1")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Plin1")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Plin1")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Adipoq")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Adipoq")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Adipoq")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Immature Preadipocytes" & Preadipocytes$Gene == "Pparg")],
+        3,
+        3)
+```
+
+```{r}
+t.test2(Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Mean[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Progenitors" & Preadipocytes$Gene == "Pparg")],
+        Preadipocytes$Stdev[which(Preadipocytes$Cell_Type == "Committed Preadipocytes" & Preadipocytes$Gene == "Pparg")],
+        3,
+        3)
+```
+
+
+
+
+
+
+
+

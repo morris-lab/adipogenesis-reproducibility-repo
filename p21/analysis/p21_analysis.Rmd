@@ -37,6 +37,11 @@ colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", 
 colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
 ```
 
+
+
+
+
+
 ## Preliminary Plots
 
 ```{r}
@@ -154,8 +159,9 @@ merrick_p12 <- readRDS("~/Downloads/merrick_etal_processed.rds")
 ### Merrick et al. prelim plots
 
 ```{r}
-s1c <- DimPlot(merrick_p12, label = T, label.size = 7) + NoLegend()
+s1c <- DimPlot(merrick_p12, label = T, label.size = 7) + NoLegend() + theme(axis.title = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.text = element_blank())
 s1c
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_07_merrick_umap.pdf", plot = s1c, height = 2, width = 3, units = "in", dpi = 300)
 ```
 
 ```{r}
@@ -164,6 +170,13 @@ s1db <- VlnPlot(object = merrick_p12, features = c("F3", "Fmo2", "Gdf10", "Ifitm
 s1dt
 s1db
 ```
+
+```{r}
+s1d <- VlnPlot(object = merrick_p12, features = c("Dpp4", "Wnt2", "Akr1c18", "Anxa3", "Sema3c", "Icam1", "Dlk1", "Fabp4", "Pparg", "Ggt5", "Cd9", "Egfl6", "Emb", "F3", "Fmo2", "Gdf10", "Ifitm1", "Thbs4", "Plxdc1", "Adipoq", "Fabp4", "Cd36", "Plin1", "Pecam1", "Acta2", "Mpz"), stack = T, flip = T) + NoLegend()
+s1d
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_07_merrick_markers.pdf", plot = s1d, height = 6, width = 4, units = "in", dpi = 300)
+```
+
 
 ### Run Capybara using custom reference with cell types as defined above 
 
@@ -610,12 +623,12 @@ p21$new_classification[colnames(preadips)[preadips$seurat_clusters %in% c(0, 1, 
 ```
 
 ```{r}
-p21$new_classification_short <- gsub("Interstitial progenitor", "Int prog", p21$new_classification)
-p21$new_classification_short <- gsub("Transitioning interstitial progenitor", "Trans int prog", p21$new_classification_short)
+p21$new_classification_short <- gsub("Interstitial progenitor", "Prog", p21$new_classification)
+p21$new_classification_short <- gsub("Transitioning interstitial progenitor", "Trans prog", p21$new_classification_short)
 p21$new_classification_short <- gsub("Immature preadipocyte", "Imm preadip", p21$new_classification_short)
 p21$new_classification_short <- gsub("Committed preadipocyte", "Comm preadip", p21$new_classification_short)
 p21$new_classification <- factor(p21$new_classification, levels = c("Interstitial progenitor", "Transitioning interstitial progenitor", "Immature preadipocyte", "Committed preadipocyte"))
-p21$new_classification_short <- factor(p21$new_classification_short, levels = c("Int prog", "Trans int prog", "Imm preadip", "Comm preadip"))
+p21$new_classification_short <- factor(p21$new_classification_short, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip"))
 ```
 
 ```{r}
@@ -633,6 +646,12 @@ p1hl + p1hr
 p1h <- grid.arrange(p1hl + NoLegend(), p1hr + NoLegend(), nrow = 1) # heights = unit(c(2, 1), c("in", "in")), 
 p1h
 ```
+
+```{r}
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/fig_1_g.pdf", p1h, width = 6, height = 4, units = "in", dpi = 600)
+```
+
+
 
 ```{r}
 frxns_p21 <- p21@meta.data[, grep('frxn', colnames(p21@meta.data))]
@@ -682,4 +701,42 @@ s1j
 
 Again, we have deposited our whole processed P21 dataset on Figshare. It has been analyzed according to the code in this notebook: 
 https://figshare.com/s/396c5f4ebd3c23d20094
+
+
+## Supp 1 panels:
+
+```{r}
+p21_f3 <- VlnPlot(p21, features = "F3", pt.size = 0) + NoLegend() + theme(plot.title = element_blank())
+p21_f3
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_16_p21_f3_vln.pdf", p21_f3, width = 3, height = 2, units = "in", dpi = 300)
+```
+
+```{r}
+p21_multiid <- DimPlot(p21, cells.highlight = colnames(p21)[which(p21$capy_classification_merrick_etal == "Multi_ID")]) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank(), legend.position = "none")
+p21_multiid
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_16_p21_multiid_umap.pdf", p21_multiid, width = 3, height = 2, units = "in", dpi = 300)
+```
+
+```{r}
+p21_fabp4 <- FeaturePlot(p21, features = "Fabp4", order = TRUE) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank())
+p21_fabp4
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_16_p21_fabp4_umap.pdf", p21_fabp4, width = 3, height = 2, units = "in", dpi = 300)
+```
+
+```{r}
+p21_pparg <- FeaturePlot(p21, features = "Pparg", order = TRUE) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0), plot.title = element_blank())
+p21_pparg
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/24_02_16_p21_pparg_umap.pdf", p21_pparg, width = 3, height = 2, units = "in", dpi = 300)
+```
+
+
+```{r}
+ct1 <- sample(colnames(data.seurat)[which(data.seurat$sample == "veh.caf")], 3000, replace = FALSE)
+ct2 <- sample(colnames(data.seurat)[which(data.seurat$sample == "CD40.Flt3L.caf")], 3000, replace = FALSE)
+downsampled <- subset(data.seurat, cells = c(ct1, ct2))
+DimPlot(downsampled, reduction = "umap", split.by = "sample")
+```
+
+
+
 

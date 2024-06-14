@@ -1,0 +1,443 @@
+---
+title: "Depot Transplant Analysis - Figure 6"
+author: "Emily Butka"
+date: "2024-06-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(ggplot2)
+library(plyr)
+```
+
+## Load data
+
+```{r}
+ing_sub <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/23_12_19_depot_transplants/24_02_13_ing_sub.rds")
+```
+
+```{r load-data}
+p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
+```
+
+```{r}
+skin_progs_merge <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/23_12_19_depot_transplants/24_02_11_skin_progs_merge.rds")
+```
+
+This mouse steady state atlas dataset is obtained from: https://www.fibroxplorer.com/download
+
+```{r}
+buechler <- readRDS("~/OneDrive/MorrisLab/Guillermo_project/23_08_28_capy_ref_comparisons/buechler/Mouse_SS_Fibro.RDS")
+```
+
+## Custom functions
+
+```{r}
+summary_func <- function(x, col){
+  c(mean = mean(x[[col]], na.rm=TRUE),
+    sd = sd(x[[col]], na.rm=TRUE))
+}
+```
+
+```{r}
+# df: data frame of all cells and relevant variables (not a table of these values!)
+# voi: variable of interest if randomization test is being applied (mapped) to several values of a categorical variable such as several cell types in a 'celltype' column
+# cond1_cond2: a list of conditions (2) that are being compared
+# cond1_cond2_var: variable name in df that holds cond1_cond2 values
+# filter_key: some variable to filter df
+# filter_var: variable name in df that holds filter_key value
+# nreps: number of randomizations to perform; default is 10,000
+randomization_test <- function(df, voi, cond1_cond2, cond1_cond2_var, filter_key, filter_var, nreps=10000) {
+  cond1_cond2_pool <- df[which(df[, filter_var] == filter_key), voi]
+  for(v in names(table(cond1_cond2_pool))) {
+    ct_tot <- length(which(cond1_cond2_pool == v))
+    cond1_tot <- length(which(df[, cond1_cond2_var] == cond1_cond2[1] & df[, filter_var] == filter_key))
+    cond2_tot <- length(which(df[, cond1_cond2_var] == cond1_cond2[2] & df[, filter_var] == filter_key))
+    deltas <- c()
+    for(i in 1:nreps) {
+      rand_pool_cond1 <- sample(cond1_cond2_pool, cond1_tot, replace = F)
+      ct_cond1 <- length(which(rand_pool_cond1 == v))
+      ct_cond2 <- ct_tot - ct_cond1
+      ct_cond1_frac <- ct_cond1 / cond1_tot
+      ct_cond2_frac <- ct_cond2 / cond2_tot
+      deltas <- c(deltas, (ct_cond1_frac - ct_cond2_frac))
+    }
+    # Note NA result means p < 1/nreps
+    print(paste(v, "p-value:", table(abs(deltas) >= abs(table(df[df[, filter_var] == filter_key, cond1_cond2_var], df[df[, filter_var] == filter_key, voi])[cond1_cond2[1], v]/cond1_tot - table(df[df[, filter_var] == filter_key, cond1_cond2_var], df[df[, filter_var] == filter_key, voi])[cond1_cond2[2], v]/cond2_tot))["TRUE"] / 10000, sep = " "))
+  }
+}
+```
+
+## Visualizations
+
+```{r}
+p6b <- DimPlot(ing_sub, group.by = "capy_new_class", reduction = "umap", cols = colpal6) + theme(axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(), legend.position = "none", plot.title = element_blank()) 
+p6b
+```
+
+```{r}
+p6c <- DimPlot(ing_sub, cells.highlight = colnames(ing_sub)[which(ing_sub$celltag_bin == 1)], reduction = "umap", cols.highlight = "red") + NoLegend() + theme(axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank())
+p6c
+```
+
+```{r}
+ing_df <- data.frame(table(ing_sub$orig.ident, ing_sub$celltag_bin, ing_sub$capy_new_class))
+colnames(ing_df) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+ing_df$rel_abundance <- NA
+for(i in 1:nrow(ing_df)) {
+  ing_df$rel_abundance[i] <- ing_df$Freq[i] / sum(ing_df$Freq[which(ing_df$replicate == ing_df$replicate[i] & ing_df$celltag == ing_df$celltag[i])])
+}
+```
+
+```{r}
+ing_df$FC_rel_host <- NA
+for(i in 1:nrow(ing_df)) {
+  ing_df$FC_rel_host[i] <- ing_df$rel_abundance[i] / ing_df$rel_abundance[which(ing_df$replicate == ing_df$replicate[i] & ing_df$celltype == ing_df$celltype[i] & ing_df$celltag == "0")]
+}
+```
+
+```{r}
+ctcapy_control_sum_3 <- ddply(ing_df[which(ing_df$celltype != "Unknown"), ], c("celltype", "celltag"), .fun = summary_func, "FC_rel_host")
+```
+
+```{r}
+ctcapy_control_sum_3$celltype <- factor(ctcapy_control_sum_3$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+Compare to previous P32 data:
+
+```{r}
+adi_df <- data.frame(table(p32$dataset, p32$celltag, p32$capy_new_class))
+colnames(adi_df) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+adi_df$rel_abundance <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$rel_abundance[i] <- adi_df$Freq[i] / sum(adi_df$Freq[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltag == adi_df$celltag[i])])
+}
+```
+
+```{r}
+adi_df$FC_rel_host <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$FC_rel_host[i] <- adi_df$rel_abundance[i] / adi_df$rel_abundance[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltype == adi_df$celltype[i] & adi_df$celltag == "none")]
+}
+```
+
+```{r}
+adi_sum <- ddply(adi_df[which(adi_df$celltype != "Unknown"), ], c("celltype", "celltag"), .fun = summary_func, "FC_rel_host")
+```
+
+```{r}
+adi_sum$celltype <- factor(adi_sum$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+adi_sum$celltag <- factor(adi_sum$celltag, levels = c("v2", "v1", "none"))
+```
+
+```{r}
+ing_interest <- rbind(ctcapy_control_sum_3, adi_sum)
+```
+
+```{r}
+s6a <- ggplot(ing_interest[which(ing_interest$celltag %in% c("v2", "1")), ], aes(x = celltag, group = celltype, fill = celltype, y = FC_rel_host)) + geom_hline(aes(yintercept = 1), linetype = "dashed") + geom_bar(stat="identity", color="black", width = 0.75, position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = FC_rel_host - sd, ymax = FC_rel_host + sd), width=.2, position=position_dodge(.9)) + theme_classic() + theme(legend.position = "none") + xlab("CellTagged populations") + ylab("Fold change relative to corresponding host proportions") + scale_fill_manual(values = colpal6) #+ scale_y_cut(breaks=3, which=1, scales=0.1) 
+s6a
+```
+
+```{r}
+# test skin progenitors vs inguinal host
+ing_sub$dummy_var <- 1
+ing_sub$celltag_bin <- as.character(ing_sub$celltag_bin)
+randomization_test(ing_sub@meta.data, "capy_new_class", c("0", "1"), "celltag_bin", 1, "dummy_var", 10000)
+```
+
+```{r}
+ing_df_2 <- data.frame(table(ing_sub$orig.ident, ing_sub$celltag_bin, ing_sub$capy_new_class))
+colnames(ing_df_2) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+ing_df_2$rel_abundance <- NA
+for(i in 1:nrow(ing_df_2)) {
+  ing_df_2$rel_abundance[i] <- ing_df_2$Freq[i] / sum(ing_df_2$Freq[which(ing_df_2$replicate == ing_df_2$replicate[i] & ing_df_2$celltag == ing_df_2$celltag[i])])
+}
+```
+
+```{r}
+ing_df_2$FC_rel_host <- NA
+for(i in 1:nrow(ing_df_2)) {
+  ing_df_2$FC_rel_host[i] <- ing_df_2$rel_abundance[i] / ing_df_2$rel_abundance[which(ing_df_2$replicate == ing_df_2$replicate[i] & ing_df_2$celltype == ing_df_2$celltype[i] & ing_df_2$celltag == 0)]
+}
+```
+
+```{r}
+ing_sum_2 <- ddply(ing_df_2[which(ing_df_2$celltype != "Unknown"), ], c("celltype", "celltag"), .fun = summary_func, "rel_abundance")
+```
+
+```{r}
+ing_sum_2$celltype <- factor(ing_sum_2$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+adi_df_2 <- data.frame(table(p32$dataset, p32$celltag, p32$capy_new_class))
+colnames(adi_df_2) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+adi_df_2$rel_abundance <- NA
+for(i in 1:nrow(adi_df_2)) {
+  adi_df_2$rel_abundance[i] <- adi_df_2$Freq[i] / sum(adi_df_2$Freq[which(adi_df_2$replicate == adi_df_2$replicate[i] & adi_df_2$celltag == adi_df_2$celltag[i])])
+}
+```
+
+```{r}
+adi_df_2$FC_rel_host <- NA
+for(i in 1:nrow(adi_df_2)) {
+  adi_df_2$FC_rel_host[i] <- adi_df_2$rel_abundance[i] / adi_df_2$rel_abundance[which(adi_df_2$replicate == adi_df_2$replicate[i] & adi_df_2$celltype == adi_df_2$celltype[i] & adi_df_2$celltag == "none")]
+}
+```
+
+```{r}
+adi_sum_2 <- ddply(adi_df_2[which(adi_df_2$celltype != "Unknown"), ], c("celltype", "celltag"), .fun = summary_func, "rel_abundance")
+```
+
+```{r}
+adi_sum_2$celltype <- factor(adi_sum_2$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+p6d1 <- ggplot(ing_sum_2[ing_sum_2$celltag == 0, ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Host inguinal cells") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p6d2 <- ggplot(ing_sum_2[ing_sum_2$celltag == 1, ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("CellTagged skin progs in ing") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
+p6d3 <- ggplot(adi_sum_2[adi_sum_2$celltag == "v2", ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p6d4 <- ggplot(adi_sum_2[adi_sum_2$celltag == "none", ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Host cells") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
+p6d <- grid.arrange(p6d1, p6d2, p6d3, p6d4, ncol = 4)
+p6d
+```
+
+```{r}
+skin_prog <- data.frame(celltype = c(as.character(ing_sub$capy_new_class[which(ing_sub$celltag_bin == 1)]), adi_merged$capy_new_class[which(adi_merged$celltag == "v2")]), transp_tissue = c(rep("inguinal", length(which(ing_sub$celltag_bin == 1))), rep("skin", length(which(adi_merged$celltag == "v2")))), dummy_var = "hello")
+```
+
+```{r}
+# Compare tissue of transplant for skin progenitors
+randomization_test(skin_prog, "celltype", c("skin", "inguinal"), "transp_tissue", "hello", "dummy_var", 10000)
+```
+
+## Nearest neighbors analysis
+
+## NN analysis of P32 CellTagged progenitors and inguinal-transplanted skin CellTagged progenitors
+
+For each cell, what fraction of 20nn belong to host same cell type 
+```{r}
+ing_skin_nn <- rep(NA, dim(ing_sub)[2])
+for(i in 1:length(ing_skin_nn)) {
+  ing_skin_nn[i] <- length(which(ing_sub$celltag_bin[ing_sub@neighbors$RNA.nn@nn.idx[i, 2:21]] == 0 & ing_sub$capy_new_class[ing_sub@neighbors$RNA.nn@nn.idx[i, 2:21]] == ing_sub$capy_new_class[i])) / 20
+}
+```
+
+```{r}
+nn_df <- data.frame(frac_nn = ing_skin_nn, celltag = ing_sub$celltag_bin, celltype = ing_sub$capy_new_class)
+nn_df$dataset <- "inguinal_transp"
+```
+
+```{r}
+ggplot(nn_df[which(nn_df$celltype %in% c("progenitor", "transitioning_progenitor")), ], aes(x = factor(celltag), y = frac_nn)) + geom_violin(trim = FALSE) + theme_classic() + stat_summary(fun=mean, geom="point", size=2)
+```
+
+```{r}
+adi_merged <- FindNeighbors(adi_merged, k.param = 21, return.neighbor = TRUE)
+```
+
+```{r}
+p32_nn <- rep(NA, dim(adi_merged)[2])
+for(i in 1:length(p32_nn)) {
+  p32_nn[i] <- length(which(adi_merged$celltag[adi_merged@neighbors$integrated.nn@nn.idx[i, 2:21]] == "none" & adi_merged$capy_new_class[adi_merged@neighbors$integrated.nn@nn.idx[i, 2:21]] == adi_merged$capy_new_class[i])) / 20
+}
+```
+
+```{r}
+nn_df_p32 <- data.frame(frac_nn = p32_nn, celltag = adi_merged$celltag, dataset = "P32_skin", celltype = adi_merged$capy_new_class)
+nn_df <- rbind(nn_df, nn_df_p32)
+```
+
+```{r}
+nn_df$group <- paste(nn_df$dataset, nn_df$celltag, sep = "_")
+```
+
+```{r}
+nn_df$group <- gsub("inguinal_transp_0", "inguinal host", nn_df$group)
+nn_df$group <- gsub("inguinal_transp_1", "inguinal CellTagged progenitors", nn_df$group)
+nn_df$group <- gsub("P32_skin_none", "skin host", nn_df$group)
+nn_df$group <- gsub("P32_skin_v1", "skin CellTagged preadipocytes", nn_df$group)
+nn_df$group <- gsub("P32_skin_v2", "skin CellTagged progenitors", nn_df$group)
+nn_df$group <- factor(nn_df$group, levels = c("inguinal host", "inguinal CellTagged progenitors", "skin host", "skin CellTagged progenitors", "skin CellTagged preadipocytes"))
+```
+
+
+```{r}
+p6e <- ggplot(nn_df[which(nn_df$celltype %in% c("progenitor", "transitioning_progenitor")), ], aes(x = group, y = frac_nn)) + geom_violin(trim = TRUE, fill = "#1f77b4") + theme_classic() + stat_summary(fun.y=mean, geom="point", size=2) + ylab("Fraction of 20 NN belonging to host")
+p6e
+```
+
+Statistics:
+
+```{r}
+t.test(nn_df$frac_nn[which(nn_df$group == "skin host" & nn_df$celltype %in% c("progenitor", "transitioning_progenitor"))], nn_df$frac_nn[which(nn_df$group == "skin CellTagged progenitors" & nn_df$celltype %in% c("progenitor", "transitioning_progenitor"))])
+```
+
+```{r}
+t.test(nn_df$frac_nn[which(nn_df$group == "inguinal host" & nn_df$celltype %in% c("progenitor", "transitioning_progenitor"))], nn_df$frac_nn[which(nn_df$group == "inguinal CellTagged progenitors" & nn_df$celltype %in% c("progenitor", "transitioning_progenitor"))])
+```
+
+## DE analysis
+
+```{r}
+progs_de_ct_all <- FindMarkers(skin_progs_merge, ident.1 = c("skin_progenitor_v2", "skin_transitioning_progenitor_v2"), ident.2 = c("inguinal_progenitor_1", "inguinal_transitioning_progenitor_1"), only.pos = FALSE, features = VariableFeatures(skin_progs_merge))
+```
+
+```{r}
+p32_de_all <- FindMarkers(adi_merged, ident.1 = colnames(adi_merged)[which(adi_merged$capy_new_class %in% c("progenitor", "transitioning_progenitor"))], ident.2 = colnames(adi_merged)[which(adi_merged$capy_new_class %in% c("immature_preadipocyte", "committed_preadipocyte"))], only.pos = FALSE, features = VariableFeatures(adi_merged))
+```
+
+```{r}
+progs_de_ct_all$gene <- rownames(progs_de_ct_all)
+progs_de_ct_all$enriched <- "zzz"
+progs_de_ct_all$enriched[which(progs_de_ct_all$p_val_adj < 0.05 & progs_de_ct_all$avg_log2FC > log2(1.5))] <- "skin"
+progs_de_ct_all$enriched[which(progs_de_ct_all$p_val_adj < 0.05 & progs_de_ct_all$avg_log2FC < -log2(1.5))] <- "inguinal"
+```
+
+```{r}
+progs_de_ct_all_sub <- progs_de_ct_all[-grep("CellTag.UTR|GFP.CDS", progs_de_ct_all$gene), ]
+```
+
+```{r}
+p6f <- ggplot(progs_de_ct_all_sub, aes(x = avg_log2FC, y = -log2(p_val_adj), color = enriched)) + geom_point() + theme_classic() + geom_vline(xintercept = log2(1.5), linetype = "dashed") + geom_vline(xintercept = -log2(1.5), linetype = "dashed") + geom_hline(yintercept = -log2(0.05), linetype = "dashed") + xlab("Log2 FC") + ylab("Negative log2 adjusted p-value") + theme(legend.position = "none") + geom_text_repel(aes(label = ifelse(abs(avg_log2FC) > 1.5 | -log2(p_val_adj) > 350, gene, "")), max.overlaps = 100) + scale_color_manual(values = c("#F8766D", "#00BFC4", "gray"))
+p6f
+```
+
+```{r}
+p32_de_all$gene <- rownames(p32_de_all)
+p32_de_all_sub <- p32_de_all[which(p32_de_all$avg_log2FC > 0), ]
+
+```
+
+
+
+```{r}
+p32_de_all_sub$core <- NA
+p32_de_all_sub$core[which(p32_de_all_sub$p_val_adj < 0.05 & p32_de_all_sub$avg_log2FC > log2(1.5))] <- "CORE"
+p32_de_all_sub$core[which(rownames(p32_de_all_sub) %in% rownames(progs_de_ct_all_sub)[which(progs_de_ct_all_sub$enriched == "skin")])] <- "skin"
+p32_de_all_sub$core[which(rownames(p32_de_all_sub) %in% rownames(progs_de_ct_all_sub)[which(progs_de_ct_all_sub$enriched == "inguinal")])] <- "inguinal"
+```
+
+
+```{r}
+p6g <- ggplot(p32_de_all_sub, aes(x = avg_log2FC, y = -log2(p_val_adj), color = core)) + geom_point() + theme_classic() + geom_vline(xintercept = log2(1.5), linetype = "dashed") + geom_hline(yintercept = -log2(0.05), linetype = "dashed") + xlab("Log2 FC") + ylab("Negative log2 adjusted p-value") + scale_color_manual(values = c("#7CAE00", "#F8766D", "#00BFC4")) + xlim(c(0, 2.3)) + theme(legend.position = "none") + geom_text_repel(aes(label = ifelse(gene %in% skin_core_identity_genes, gene, "")), max.overlaps = 10000000)
+p6g
+```
+
+## Buechler atlas analysis
+
+```{r}
+skin_core_identity_genes <- c("Ackr3", "Akr1c18", "Aldh1a3", "Anxa3", "C3", "Cd55", "Dpp4", "Efemp1", "Gap43", "Ifi205", "Ifi27l2a", "Igfbp4", "Igfbp5", "Il1r2", "Il33", "Krtdap", "Mustn1", "Pcsk6", "Pi16", "Pla1a", "Plac8", "Prkg2", "Prss23", "Ptgs2", "Sbsn", "Sfrp2", "Wnt2")
+```
+
+```{r}
+buechler <- AddModuleScore(buechler, features = list(skin_core_identity_genes), name = "skin_prog_identity")
+```
+
+```{r}
+p6i <- VlnPlot(buechler, features = "skin_prog_identity1", group.by = "Tissue", pt.size = 0, sort = TRUE) + NoLegend()
+p6j <- VlnPlot(buechler, features = "skin_prog_identity1", group.by = "ClustName", pt.size = 0, sort = TRUE) + NoLegend()
+p6i
+p6j
+```
+
+```{r}
+buechler_pi16 <- subset(buechler, cells = colnames(buechler)[which(buechler$ClustName == "Pi16")])
+dfplot <- data.frame(table(buechler_pi16$ClustName, buechler_pi16$Tissue))
+s6c <- ggplot(dfplot, aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity", color = "black") + theme_classic()
+s6c
+```
+
+## GO analysis
+
+```{r}
+go_depot_skin_pathways <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/23_12_19_depot_transplants/24_02_15_go_panther_pathways_depot_skin.txt")
+go_depot_inguinal_pathways <- read.csv("~/OneDrive/MorrisLab/Guillermo_project/23_12_19_depot_transplants/24_02_15_go_panther_pathways_depot_inguinal.txt")
+```
+
+```{r}
+go_depot_skin_pathways <- go_depot_skin_pathways[-(1:5), ]
+go_depot_inguinal_pathways <- go_depot_inguinal_pathways[-(1:5), ]
+```
+
+```{r}
+go_depot_skin_pathways <- data.frame(t(data.frame(strsplit(go_depot_skin_pathways, "\t"))))
+rownames(go_depot_skin_pathways) <- NULL
+colnames(go_depot_skin_pathways) <- go_depot_skin_pathways[1, ]
+go_depot_skin_pathways <- tail(go_depot_skin_pathways, -1)
+rownames(go_depot_skin_pathways) <- NULL
+
+go_depot_inguinal_pathways <- data.frame(t(data.frame(strsplit(go_depot_inguinal_pathways, "\t"))))
+rownames(go_depot_inguinal_pathways) <- NULL
+colnames(go_depot_inguinal_pathways) <- go_depot_inguinal_pathways[1, ]
+go_depot_inguinal_pathways <- tail(go_depot_inguinal_pathways, -1)
+rownames(go_depot_inguinal_pathways) <- NULL
+```
+
+
+### Categorize and plot
+
+#### First: depot GO terms
+
+```{r}
+go_depot_categories <- data.frame(term = c(go_depot$`GO biological process complete`, go_depot_ing$`GO biological process complete`))
+go_depot_categories$depot <- c(rep("skin", dim(go_depot)[1]), rep("inguinal", dim(go_depot_ing)[1]))
+```
+
+```{r}
+go_depot_categories$Proliferation <- ifelse(grepl("mitosis|spindle|mitotic|cell cycle|proliferation|replication|chromatid|kinetochore|division|chromosome separation|metaphase", go_depot_categories$term), 1, 0)
+go_depot_categories$Signaling <- ifelse(grepl("signal|transport|import|export|communication", go_depot_categories$term), 1, 0)
+go_depot_categories$Development <- ifelse(grepl("differentiation|development|morphogenesis", go_depot_categories$term), 1, 0)
+go_depot_categories$Growth <- ifelse(grepl("growth", go_depot_categories$term), 1, 0)
+```
+
+```{r}
+go_depot_categories$term[which(apply(go_depot_categories[, 3:6], 1, sum) == 0)]
+```
+
+```{r}
+go_depot_categories$Metabolism <- ifelse(grepl("metabol", go_depot_categories$term), 1, 0)
+go_depot_categories$Death <- ifelse(grepl("apopto|death", go_depot_categories$term), 1, 0)
+go_depot_categories$Phosphorylation <- ifelse(grepl("phosphorylation", go_depot_categories$term), 1, 0)
+go_depot_categories$Adhesion <- ifelse(grepl("adhesion", go_depot_categories$term), 1, 0)
+go_depot_categories$Migration <- ifelse(grepl("migration|locomotion|motility", go_depot_categories$term), 1, 0)
+go_depot_categories$Organization <- ifelse(grepl("organization", go_depot_categories$term), 1, 0)
+go_depot_categories$Immune <- ifelse(grepl("immune|defense|viral|host|lymphocyte|presentation|antigen|killer|leukocyte|immunity|interleukin|inflammatory|chemotaxis|class|cytotoxicity|cytokine", go_depot_categories$term), 1, 0)
+```
+
+```{r}
+go_depot_categories_plot <- data.frame(category = rep(colnames(go_depot_categories[, -c(1:2)]), 2), depot = rep(c("skin", "inguinal"), each = length(colnames(go_depot_categories[, -c(1:2)]))))
+go_depot_categories_plot$num_terms <- NA
+for(i in 1:nrow(go_depot_categories_plot)) {
+  go_depot_categories_plot$num_terms[i] <- sum(go_depot_categories[which(go_depot_categories$depot == go_depot_categories_plot$depot[i]), which(colnames(go_depot_categories) == go_depot_categories_plot$category[i])])
+}
+```
+
+```{r}
+go_depot_categories_plot$category <- factor(go_depot_categories_plot$category, levels = unique(go_depot_categories_plot$category[order(sapply(unique(go_depot_categories_plot$category), function(x) (sum(go_depot_categories_plot$num_terms[which(go_depot_categories_plot$category == x)]))))]))
+p6k <- ggplot(go_depot_categories_plot, aes(x = num_terms, y = category, fill = depot)) + geom_col(color = "black", position = "dodge") + theme_classic() + xlab("Number of GO terms significantly enriched in skin progenitors that\nremain as progenitors transplanted into the skin or inguinal depot") + ylab("GO term category") + theme(legend.position = "none")
+p6k
+```
+
+
+
+

@@ -1,0 +1,238 @@
+---
+title: "CellOracle analysis - Figure 4"
+author: "Emily Butka"
+date: "2024-06-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(ggplot2)
+library(gridExtra)
+```
+
+## Load data
+
+```{r load-data}
+p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
+```
+
+```{r}
+co_scores
+```
+
+## Color palette
+
+```{r}
+colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
+```
+
+## Run Monocle2
+
+```{r}
+write.csv(p32@meta.data, "cell_sample_sheet.csv")
+write.table(rownames(p32@assays$RNA@counts), "gene_annotations.txt", row.names = F, col.names = F)
+```
+
+```{r}
+HSMM_sample_sheet <- read.csv("cell_sample_sheet.csv", header = T)
+HSMM_gene_annotation <- read.delim("gene_annotations.txt", header = F)
+```
+
+```{r}
+pd <- new("AnnotatedDataFrame", data = HSMM_sample_sheet)
+fd <- new("AnnotatedDataFrame", data = HSMM_gene_annotation)
+rownames(pd) <- pd@data$X
+rownames(fd) <- fd@data$V1
+colnames(fd@data) <- "gene_short_name"
+```
+
+```{r}
+expr_matrix <- as(p32@assays$RNA@counts, "sparseMatrix")
+expr_matrix <- expr_matrix[, rownames(pd)]
+expr_matrix <- expr_matrix[rownames(fd), ]
+```
+
+```{r}
+HSMM <- newCellDataSet(expr_matrix,
+                       phenoData = pd,
+                       featureData = fd,
+                       lowerDetectionLimit = 0.5,
+                       expressionFamily = negbinomial.size())
+
+HSMM <- estimateSizeFactors(HSMM)
+HSMM <- estimateDispersions(HSMM)
+HSMM <- detectGenes(HSMM, min_expr = 0.1)
+expressed_genes <- row.names(subset(fData(HSMM), num_cells_expressed >= 10))
+```
+
+```{r}
+# Log-transform each value in the expression matrix.
+L <- log(exprs(HSMM[expressed_genes,]))
+```
+
+```{r}
+# Standardize each gene, so that they are all on the same scale,
+# Then melt the data with plyr so we can plot it easily
+melted_dens_df <- melt(Matrix::t(scale(Matrix::t(L))))
+```
+
+```{r}
+# Plot the distribution of the standardized gene expression values.
+qplot(value, geom = "density", data = melted_dens_df) +
+  stat_function(fun = dnorm, size = 0.5, color = 'red') +
+  xlab("Standardized log(FPKM)") +
+  ylab("Density")
+```
+
+```{r}
+HSMM <- reduceDimension(HSMM, max_components = 2,
+                        method = 'DDRTree')
+
+HSMM <- orderCells(HSMM)
+
+plot_cell_trajectory(HSMM, color_by = "capy_new_class")
+```
+
+```{r}
+prog_state <- function(cds){
+  if (length(unique(pData(cds)$State)) > 1){
+    T0_counts <- table(pData(cds)$State, pData(cds)$capy_new_class)[,"progenitor"]
+    return(as.numeric(names(T0_counts)[which
+                                       (T0_counts == max(T0_counts))]))
+  } else {
+    return (1)
+  }
+}
+```
+
+```{r}
+HSMM <- orderCells(HSMM, root_state = prog_state(HSMM))
+```
+
+```{r}
+plot_cell_trajectory(HSMM, color_by = "Pseudotime")
+```
+
+State and pseudotime information are stored in `p32` as `monocle_state` and `pseudotime_df`, respectively. Monocle dimension reduction embedding coordinates are also stored in `p32` as `monocle_dim1` and `monocle_dim2`.
+
+### Visualizations
+
+```{r}
+pseudotime_df <- data.frame(Dim1 = p32$monocle_dim1, Dim2 = p32$monocle_dim2, Pseudotime = p32$pseudotime_df)
+p4a <- ggplot(pseudotime_df, aes(x = Dim1, y = Dim2, color = Pseudotime)) + geom_point() + theme_classic() + theme(axis.text = element_blank(), axis.title = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(), legend.position = "bottom", plot.margin = margin(0, 0, 0, 0))
+p4a
+```
+
+```{r}
+pseudotime_df$celltype <- p32$capy_new_class
+pseudotime_df$celltype <- factor(pseudotime_df$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID", "Unknown"))
+p4b <- ggplot(pseudotime_df, aes(x = Dim1, y = Dim2, color = celltype)) + geom_point() + theme_classic() + theme(axis.text = element_blank(), axis.title = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(), legend.position = "bottom", plot.margin = margin(0, 0, 0, 0)) + scale_color_manual(values = colpal6)
+p4b
+```
+
+```{r}
+s4a1 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "progenitor"), ], aes(x = Dim1, y = Dim2)) + geom_point(color = colpal6[1]) + theme_classic() + theme(axis.line = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank())
+s4a2 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "transitioning_progenitor"), ], aes(x = Dim1, y = Dim2)) + geom_point(color = colpal6[2]) + theme_classic() + theme(axis.line = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank())
+s4a3 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "immature_preadipocyte"), ], aes(x = Dim1, y = Dim2)) + geom_point(color = colpal6[3]) + theme_classic() + theme(axis.line = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank())
+s4a4 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "committed_preadipocyte"), ], aes(x = Dim1, y = Dim2)) + geom_point(color = colpal6[4]) + theme_classic() + theme(axis.line = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank())
+s4a1
+s4a2
+s4a3
+s4a4
+```
+
+```{r}
+s4a5 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "progenitor"), ], aes(x = Dim1, y = Dim2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none") + xlim(min(pseudotime_df$Dim1), max(pseudotime_df$Dim1)) + ylim(min(pseudotime_df$Dim2), max(pseudotime_df$Dim2))
+s4a6 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "transitioning_progenitor"), ], aes(x = Dim1, y = Dim2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none") + xlim(min(pseudotime_df$Dim1), max(pseudotime_df$Dim1)) + ylim(min(pseudotime_df$Dim2), max(pseudotime_df$Dim2))
+s4a7 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "immature_preadipocyte"), ], aes(x = Dim1, y = Dim2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none") + xlim(min(pseudotime_df$Dim1), max(pseudotime_df$Dim1)) + ylim(min(pseudotime_df$Dim2), max(pseudotime_df$Dim2))
+s4a8 <- ggplot(pseudotime_df[which(pseudotime_df$celltype == "committed_preadipocyte"), ], aes(x = Dim1, y = Dim2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none") + xlim(min(pseudotime_df$Dim1), max(pseudotime_df$Dim1)) + ylim(min(pseudotime_df$Dim2), max(pseudotime_df$Dim2))
+s4a5
+s4a6
+s4a7
+s4a8
+```
+
+```{r}
+p32$capy_new_class_short <- factor(p32$capy_new_class_short, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+s4b <- VlnPlot(p32[, which(p32$capy_new_class_short %in% c("Prog", "Trans prog", "Imm preadip", "Comm preadip"))], features = "monocle_pseudotime", group.by = "capy_new_class_short", pt.size = 0) + scale_fill_manual(values = colpal6) + NoLegend() + theme(plot.title = element_blank())
+s4b
+```
+
+```{r}
+pseudotime_df$state <- factor(p32$monocle_state)
+s4c <- ggplot(pseudotime_df, aes(x = Dim1, y = Dim2, color = state)) + geom_point() + theme_classic() + theme(axis.text = element_blank(), axis.title = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(), legend.position = "bottom", plot.margin = margin(0, 0, 0, 0))
+s4c
+```
+
+```{r}
+s4d <- ggplot(data.frame(table(pseudotime_df$celltype[which(pseudotime_df$celltype != "Unknown")], pseudotime_df$state[which(pseudotime_df$celltype != "Unknown")])), aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity", position = "fill") + theme_classic() + ylab("Relative abundance")
+s4d
+```
+
+## Perturbation scores
+
+```{r}
+co_scores$whole_sum <- apply(co_scores[, c("whole_cells_score_pos", "whole_cells_score_neg")], 1, sum)
+```
+
+```{r}
+genes_to_plot <- co_scores$gene[order(co_scores$whole_sum, decreasing = T)][1:20]
+genes_to_plot
+```
+
+```{r}
+co_scores_plot <- co_scores[order(co_scores$whole_sum, decreasing = T)[1:20], ]
+co_scores_plot$gene <- factor(co_scores_plot$gene, levels = rev(genes_to_plot))
+```
+
+```{r}
+p_neg <- ggplot(co_scores_plot, aes(x = whole_cells_score_neg, y = gene)) + geom_col(color = "black", fill = "#8E0152") + theme_classic() + xlab("Knockout PS") + ylab("TF") + scale_x_reverse()
+#p_neg
+p_pos <- ggplot(co_scores_plot, aes(x = whole_cells_score_pos, y = gene)) + geom_col(color = "black", fill = "#276419") + theme_classic() + xlab("Upregulation PS") + ylab("TF") 
+#p_pos
+p4e <- grid.arrange(p_neg, p_pos, nrow = 1)
+p4e
+```
+
+```{r}
+df2 <- data.frame(gene = rep(co_scores$gene, 2), prog_score = c(co_scores$progenitors_score_pos, -co_scores$progenitors_score_neg), comm_score = c(co_scores$committed_preadipocytes_score_pos, -co_scores$committed_preadipocytes_score_neg), pos_neg = c(rep("pos", dim(co_scores)[1]), rep("neg", dim(co_scores)[1])))
+```
+
+```{r}
+s4e <- ggplot(df2, aes(x = prog_score, y = comm_score, color = pos_neg, label = gene)) + geom_hline(yintercept = 0) + geom_vline(xintercept = 0) + geom_point(size = 1) + geom_text_repel(label = ifelse(abs(df2$prog_score) > 5 | abs(df2$comm_score) > 5, df2$gene, NA), color = "black", max.overlaps = 35) + theme_classic() + scale_color_manual(values = c("#8E0152", "#276419")) + theme(legend.position = "bottom") + xlab("Progenitor PS") + ylab("Committed preadipocyte PS") #+ theme(axis.text.x = element_text(vjust = 67), axis.text.y = element_text(hjust = 8))
+s4e
+```
+
+## Sox9 expression
+
+```{r}
+pseudotime_df$sox9 <- p32@assays$RNA@data["Sox9", ]
+s4f <- ggplot(pseudotime_df, aes(x = Pseudotime, y = sox9, color = celltype)) + geom_point(alpha = 0.3) + scale_color_manual(values = colpal6) + theme_classic() + ylab("Sox9 Expression")
+s4f
+```
+
+
+
+
+
+
+
+
+
+
+
+

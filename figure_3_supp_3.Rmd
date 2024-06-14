@@ -1,0 +1,729 @@
+---
+title: "P32 Naive Processed Data Analysis"
+author: "Emily Butka"
+date: "2023-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-packages}
+library(Seurat)
+library(ggplot2)
+library(scclusteval)
+library(grid)
+library(gridExtra)
+library(plyr)
+```
+
+
+This notebook contains code used to integrate 4 biological replicates, quality control, and analyze P32 naive data following alignment. Code for all panels from Figure 2, Figure 3A-B, and Supplementary Figure 5 is outlined here.
+
+## Load processed data
+
+Raw data are processed in the preceeding notebook. Here, we will use the processed data for further analysis. This can be found at: https://figshare.com/s/b75e3e90389bf38c5524
+
+```{r load-data}
+p32 <- readRDS("~/Downloads/p32_naive_processed.rds")
+```
+
+https://figshare.com/s/396c5f4ebd3c23d20094
+
+```{r load-data}
+p21 <- readRDS("~/Downloads/p21_processed.rds")
+```
+
+```{r}
+ncebpa <- readRDS("~/Downloads/ncebpa.rds")
+```
+
+## Color palettes
+
+```{r}
+colpal12 <- c("#FFC33B", "#FF6E3A", "#E20134", "#9F0162", "#FFB2FD", "#00C2F9", "#008DF9", "#8400CD", "#00FCCF", "#FF5AAF", "#009F81", "gray")
+```
+
+```{r}
+colpal6 <- c("#211E71", "#009F81", "#FF5AAF", "#741112", "#FFC02D", "gray")
+```
+
+```{r}
+colpal2_pink_blue <- c("#E75F62", "#232380")
+```
+
+## Custom functions
+
+```{r}
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  #data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r}
+# df: data frame of all cells and relevant variables (not a table of these values!)
+# voi: variable of interest if randomization test is being applied (mapped) to several values of a categorical variable such as several cell types in a 'celltype' column
+# cond1_cond2: a list of conditions (2) that are being compared
+# cond1_cond2_var: variable name in df that holds cond1_cond2 values
+# filter_key: some variable to filter df
+# filter_var: variable name in df that holds filter_key value
+# nreps: number of randomizations to perform; default is 10,000
+randomization_test <- function(df, voi, cond1_cond2, cond1_cond2_var, filter_key, filter_var, nreps=10000) {
+  cond1_cond2_pool <- df[which(df[, filter_var] == filter_key), voi]
+  for(v in names(table(cond1_cond2_pool))) {
+    ct_tot <- length(which(cond1_cond2_pool == v))
+    cond1_tot <- length(which(df[, cond1_cond2_var] == cond1_cond2[1] & df[, filter_var] == filter_key))
+    cond2_tot <- length(which(df[, cond1_cond2_var] == cond1_cond2[2] & df[, filter_var] == filter_key))
+    deltas <- c()
+    for(i in 1:nreps) {
+      rand_pool_cond1 <- sample(cond1_cond2_pool, cond1_tot, replace = F)
+      ct_cond1 <- length(which(rand_pool_cond1 == v))
+      ct_cond2 <- ct_tot - ct_cond1
+      ct_cond1_frac <- ct_cond1 / cond1_tot
+      ct_cond2_frac <- ct_cond2 / cond2_tot
+      deltas <- c(deltas, (ct_cond1_frac - ct_cond2_frac))
+    }
+    # Note NA result means p < 1/nreps
+    print(paste(v, "p-value:", table(abs(deltas) >= abs(table(df[df[, filter_var] == filter_key, cond1_cond2_var], df[df[, filter_var] == filter_key, voi])[cond1_cond2[1], v]/cond1_tot - table(df[df_test[, filter_var] == filter_key, cond1_cond2_var], df[df[, filter_var] == filter_key, voi])[cond1_cond2[2], v]/cond2_tot))["TRUE"] / 10000, sep = " "))
+  }
+}
+```
+
+## Prelim plots
+
+```{r}
+p3b <- DimPlot(p32, label = T, label.size = 7, raster = F) + NoLegend() + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8, family='Helvetica'), plot.margin = margin(0, 0, 0, 0)) 
+p3b
+```
+
+```{r}
+p3c <- DimPlot(p32, cells.highlight = list("Progenitors" = colnames(p32)[which(p32$celltag == "v2")], "Preadipocytes" = colnames(p32)[which(p32$celltag == "v1")]), cols.highlight = c("#232380", "#E75F62"), sizes.highlight = 0.5) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+p3c
+```
+
+```{r}
+s3a <- FeaturePlot(p32, features = "Cebpa")
+s3a
+```
+
+## Capybara with P21 new classification reference
+
+### Run Capybara using custom reference as defined by cell types in P21 dataset
+
+Code and workflow described at https://github.com/morris-lab/Capybara. We did not perform tissue-level classification (Step 1); rather, a high-resolution custom reference was generated and continuous identity measured (Step 2) followed by discrete cell type classification and multiple identity scoring (Step 3).
+
+Custom code to extract hybrid IDs and mean p-values for assignments is as follows, using data frames `bin.count` and `perc.list` described in Capybara workflow:
+
+```{r}
+# hybrids
+bin.count.rowsums <- apply(bin.count, 1, sum)
+rownames(bin.count)[which(bin.count.rowsums > 1)]
+bin.count.greaterthan1 <- apply(bin.count[which(bin.count.rowsums > 1), ], c(1, 2), function(x) {x > 0})
+multi.celltypes <- apply(bin.count.greaterthan1, 1, function(x) {print(colnames(bin.count.greaterthan1)[x])})
+
+hybrids <- c()
+for(i in 1:length(multi.celltypes)) {
+  #print(multi.celltypes[i])
+  hybrids <- c(hybrids, paste(multi.celltypes[[i]], collapse = "-"))
+}
+
+hybrids <- gsub("frxn_cell.type_", "", hybrids)
+
+# p-values for classifications
+pval_avg_mat <- data.frame()
+for(i in 1:length(perc.list)) {
+  pval_avg_mat <- rbind(pval_avg_mat, apply(perc.list[[i]][[1]], 2, mean))
+  rownames(pval_avg_mat)[i] <- names(perc.list[[i]])
+}
+colnames(pval_avg_mat) <- names(apply(perc.list[[1]][[1]], 2, mean))
+```
+
+Classifications, hybrids, p-values, and identity fractions imported to p32 Seurat object as `capy_new_class`, `capy_new_class_hybrid`, `capy_pval_xxx`, and `capy_frxn_xxx`, respectively. This information is stored in `p32_naive_processed.rds` on Figshare.
+
+### Figures and visualizations of Capybara data
+
+```{r}
+p32$capy_new_class_short <- gsub("_", " ", p32$capy_new_class_short)
+p32$capy_new_class_short <- factor(p32$capy_new_class_short, levels = c("Prog", "Trans int prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+```
+
+```{r}
+p3d <- DimPlot(p32, group.by = "capy_new_class_short", cols = colpal6) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), plot.title = element_blank(), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+p3d
+```
+
+```{r}
+ctcapy <- data.frame(table(p32$celltag, p32$capy_new_class_short))
+p2el <- ggplot(ctcapy[ctcapy$Var1 == "v2", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p2er <- ggplot(ctcapy[ctcapy$Var1 == "v1", ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Cd9 CellTagged cells") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
+p2e <- p2el + p2er
+p2e
+```
+
+```{r}
+# Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
+p32$is_transplant <- TRUE
+p32$is_transplant[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- FALSE
+#table(p32$is_transplant)
+```
+
+```{r}
+umap.embedding <- p32@reductions$umap@cell.embeddings
+transplant.embedding <- as.data.frame(umap.embedding[which(p32$is_transplant), ])
+```
+
+```{r}
+s3b <- ggplot(transplant.embedding, aes(x = UMAP_1, y = UMAP_2)) +
+  stat_density_2d(aes(fill = stat(density)), geom="raster", contour = FALSE) +
+  #scale_fill_viridis(option = "H") +
+  #scale_fill_gradient(low = "white", high = "darkgreen") + 
+  scale_fill_gradientn(colors = c("white", magma(5)[2:5])) +
+  geom_point(alpha = 0.2, size = 0.2, color = "#FCFDBF") + theme_classic() + theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "bottom")
+s3b + theme(legend.position = "bottom")
+```
+
+```{r}
+adi_df <- data.frame(table(p32$dataset, p32$celltag, p32$capy_new_class))
+colnames(adi_df) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+adi_df$rel_abundance <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$rel_abundance[i] <- adi_df$Freq[i] / sum(adi_df$Freq[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltag == adi_df$celltag[i])])
+}
+```
+
+```{r}
+adi_df$FC_rel_host <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$FC_rel_host[i] <- adi_df$rel_abundance[i] / adi_df$rel_abundance[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltype == adi_df$celltype[i] & adi_df$celltag == "none")]
+}
+```
+
+```{r}
+adi_sum <- data_summary(adi_df[which(adi_df$celltype != "Unknown"), ], varname="rel_abundance", groupnames=c("celltype", "celltag"))
+```
+
+```{r}
+adi_sum$celltype <- factor(adi_sum$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+p3el <- ggplot(adi_sum[adi_sum$celltag == "v2", ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p3er <- ggplot(adi_sum[adi_sum$celltag == "v1", ], aes(x="", y=mean, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Cd9 CellTagged cells") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
+p3e <- p3el + p3er
+p3e
+```
+
+```{r}
+df_test <- data.frame(celltype = p32$capy_new_class_short[which(p32$celltag != "none")], celltag = as.character(p32$celltag)[which(p32$celltag != "none")], dummyvar = 1)
+```
+
+```{r}
+# test v1 against v2
+randomization_test(df_test, "celltype", c("v1", "v2"), "celltag", 1, "dummyvar", 10000)
+```
+
+```{r}
+adi_df <- data.frame(table(p32$dataset, p32$celltag, p32$capy_new_class))
+colnames(adi_df) <- c("replicate", "celltag", "celltype", "Freq")
+```
+
+```{r}
+adi_df$rel_abundance <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$rel_abundance[i] <- adi_df$Freq[i] / sum(adi_df$Freq[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltag == adi_df$celltag[i])])
+}
+```
+
+```{r}
+adi_df$FC_rel_host <- NA
+for(i in 1:nrow(adi_df)) {
+  adi_df$FC_rel_host[i] <- adi_df$rel_abundance[i] / adi_df$rel_abundance[which(adi_df$replicate == adi_df$replicate[i] & adi_df$celltype == adi_df$celltype[i] & adi_df$celltag == "none")]
+}
+```
+
+```{r}
+adi_sum <- data_summary(adi_df[which(adi_df$celltype != "Unknown"), ], varname="FC_rel_host", groupnames=c("celltype", "celltag"))
+```
+
+```{r}
+adi_sum$celltype <- factor(adi_sum$celltype, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+adi_sum$celltag <- factor(adi_sum$celltag, levels = c("v2", "v1", "none"))
+p3f <- ggplot(adi_sum[which(adi_sum$celltag != "none"), ], aes(x = celltag, group = celltype, fill = celltype, y = FC_rel_host)) + geom_hline(aes(yintercept = 1), linetype = "dashed") + geom_bar(stat="identity", color="black", width = 0.75, position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = FC_rel_host - sd, ymax = FC_rel_host + sd), width=.2, position=position_dodge(.9)) + theme_classic() + theme(legend.position = "none") + xlab("CellTagged populations") + ylab("Fold change relative to host proportions") + scale_fill_manual(values = colpal6) + scale_y_cut(breaks=2, which=1, scales=0.1) 
+p3f
+```
+
+## Potential confounders
+
+### Host vs. transplant
+
+```{r}
+# Mark cells that have GFP > 0 OR a CellTag as "TRANSPLANT"
+p32$celltag_origin <- p32$celltag
+p32$celltag_origin[which(p32@assays$RNA@counts["GFP.CDS", ] == 0 & p32$celltag == "none")] <- "None-Host"
+p32$celltag_origin[which(p32@assays$RNA@counts["GFP.CDS", ] > 0 & p32$celltag == "none")] <- "None-Transplant"
+```
+
+#### Remove transplant cells, re-cluster, and compare clusters to original host-transplant co-embedding
+
+```{r}
+p32 <- FindNeighbors(p32, return.neighbor = T, k.param = 21)
+```
+
+```{r}
+DefaultAssay(p32) <- "integrated"
+```
+
+```{r}
+# New clusters and embedding of host cells only
+p32_sub <- p32[, which(p32$celltag_origin == "None-Host")]
+```
+
+```{r}
+# Clusters and embedding generated with host and transplant cells
+p32_sub2 <- p32[, which(p32$celltag_origin == "None-Host")]
+```
+
+```{r}
+p32_sub <- ScaleData(p32_sub)
+p32_sub <- FindVariableFeatures(p32_sub)
+p32_sub <- RunPCA(p32_sub)
+p32_sub <- RunUMAP(p32_sub, dims = 1:10)
+p32_sub <- FindNeighbors(p32_sub)
+p32_sub <- FindClusters(p32_sub)
+p32_sub <- FindNeighbors(p32_sub, return.neighbor = T, k.param = 21)
+```
+
+```{r}
+DimPlot(p32_sub2, label = TRUE, label.size = 7) + NoLegend()
+```
+
+```{r}
+DimPlot(p32_sub, label = TRUE, label.size = 7) + NoLegend()
+```
+
+```{r}
+p32_sub2 <- FindNeighbors(p32_sub2, reduction = "umap", dims = 1:2, k.param = 21, return.neighbor = TRUE)
+```
+
+```{r}
+nndistdf <- data.frame(p32_sub2@neighbors$integrated.nn@nn.dist[, 2:21], row.names = p32_sub2@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+nndistdf_mean <- apply(nndistdf, 1, mean)
+```
+
+#### Now find distances and calculate mean for reclustered host data with same cells
+
+```{r}
+nncells_orig <- data.frame(p32_sub2@neighbors$integrated.nn@nn.idx[, 2:21], row.names = p32_sub2@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+umap_new <- p32_sub@reductions$umap@cell.embeddings
+```
+
+```{r}
+euclidean <- function(a, b) sqrt(sum((a - b)^2))
+```
+
+```{r}
+nndistdf2 <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_orig)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_orig)[j], ], umap_new[nncells_orig[j, i], ]))
+  }
+  #print(row)
+  nndistdf2 <- rbind(nndistdf2, row)
+}
+```
+
+```{r}
+nndistdf2_mean <- apply(nndistdf2, 1, mean)
+```
+
+```{r}
+nncells_random <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- sample.int(dim(nncells_orig)[1], 20, replace = FALSE)
+  nncells_random <- rbind(nncells_random, row)
+}
+rownames(nncells_random) <- p32_sub2@neighbors$integrated.nn@cell.names
+```
+
+```{r}
+nndistdf_random <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_random)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_random)[j], ], umap_new[nncells_random[j, i], ]))
+  }
+  #print(row)
+  nndistdf_random <- rbind(nndistdf_random, row)
+}
+```
+
+```{r}
+nndistdf_random_mean <- apply(nndistdf_random, 1, mean)
+```
+
+```{r}
+nncells_random_in_clust <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  clust <- p32_sub$seurat_clusters[rownames(nncells_orig)[j]]
+  cells_in_clust <- c(1:dim(nncells_orig)[1])[which(p32_sub$seurat_clusters == clust)]
+  row <- cells_in_clust[sample.int(length(cells_in_clust), 20, replace = FALSE)]
+  nncells_random_in_clust <- rbind(nncells_random_in_clust, row)
+}
+rownames(nncells_random_in_clust) <- p32_sub2@neighbors$integrated.nn@cell.names
+```
+
+```{r}
+nndistdf_random_in_clust <- data.frame()
+for(j in 1:dim(nncells_orig)[1]) {
+  row <- c()
+  for(i in 1:dim(nncells_random_in_clust)[2]) {
+    row <- c(row, euclidean(umap_new[rownames(nncells_random_in_clust)[j], ], umap_new[nncells_random_in_clust[j, i], ]))
+  }
+  #print(row)
+  nndistdf_random_in_clust <- rbind(nndistdf_random_in_clust, row)
+}
+```
+
+```{r}
+nndistdf_random_in_clust_mean <- apply(nndistdf_random_in_clust, 1, mean)
+```
+
+```{r}
+nndistdf2_own <- data.frame(p32_sub@neighbors$integrated.nn@nn.dist[, 2:21], row.names = p32_sub@neighbors$integrated.nn@cell.names)
+```
+
+```{r}
+nndistdf2_own_mean <- apply(nndistdf2_own, 1, mean)
+```
+
+```{r}
+dists <- data.frame("embedding" = c(rep("Original", dim(nncells_orig)[1]), rep("Reclustered", dim(nncells_orig)[1]), rep("Reclustered_own_20nn", dim(nncells_orig)[1]), rep("Random", dim(nncells_orig)[1]), rep("Random_in_clust", dim(nncells_orig)[1])),
+                    "distance" = c(nndistdf_mean, nndistdf2_mean, nndistdf2_own_mean, nndistdf_random_mean, nndistdf_random_in_clust_mean))
+```
+
+```{r}
+dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered", "Reclustered_own_20nn", "Random", "Random_in_clust"))
+```
+
+```{r}
+s3c <- ggplot(dists, aes(x = gsub("_", " ", embedding), y = distance)) + geom_boxplot() + theme_classic() + labs(x = "Embedding", y = "Distance")
+s3c
+```
+
+### Louvain cluster
+
+```{r}
+s3d <- SilhouetteRainCloudPlot(CalculateSilhouette(p32))
+s3d
+```
+
+### Compare P21 and P32
+
+```{r}
+time_compare_p21 <- data.frame(table(p21$new_classification_short))
+time_compare_p32 <- data.frame(table(p32$capy_new_class_short))
+time_compare_p21$time <- "P21"
+time_compare_p32$time <- "P32"
+time_compare <- rbind(time_compare_p21, time_compare_p32)
+```
+
+```{r}
+time_compare$Var1 <- gsub("Int prog", "Prog", time_compare$Var1)
+time_compare$Var1 <- gsub("Trans int prog", "Trans prog", time_compare$Var1)
+time_compare$Var1 <- factor(time_compare$Var1, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+```
+
+```{r}
+s3e <- ggplot(time_compare, aes(x = time, y = Freq, fill = Var1)) + geom_bar(stat = "identity", position = "fill") + theme_classic() + scale_fill_manual(values = colpal6)
+s3e
+```
+
+
+### Biological replicate
+
+#### Relative abundance of Capy cell types
+
+```{r}
+refqdfi <- data.frame(p32@meta.data[, c('celltag', 'capy_new_class', 'dataset')])
+refqdfi <- data.frame(table(refqdfi$celltag, refqdfi$capy_new_class, refqdfi$dataset))
+refqdfi$Var2 <- factor(refqdfi$Var2, levels = c("progenitor", "transitioning_progenitor", "immature_preadipocyte", "committed_preadipocyte", "Multi_ID"))
+```
+
+```{r}
+colpal5 <- colpal6[1:5]
+```
+
+```{r}
+p1 <- ggplot(refqdfi[which(refqdfi$Var1 == "none" & refqdfi$Var3 == "0706"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p2 <- ggplot(refqdfi[which(refqdfi$Var1 == "none" & refqdfi$Var3 == "0708"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p3 <- ggplot(refqdfi[which(refqdfi$Var1 == "none" & refqdfi$Var3 == "0722"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p4 <- ggplot(refqdfi[which(refqdfi$Var1 == "none" & refqdfi$Var3 == "1104"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p5 <- ggplot(refqdfi[which(refqdfi$Var1 == "v2" & refqdfi$Var3 == "0706"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p6 <- ggplot(refqdfi[which(refqdfi$Var1 == "v2" & refqdfi$Var3 == "0708"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p7 <- ggplot(refqdfi[which(refqdfi$Var1 == "v2" & refqdfi$Var3 == "0722"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p8 <- ggplot(refqdfi[which(refqdfi$Var1 == "v2" & refqdfi$Var3 == "1104"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p9 <- ggplot(refqdfi[which(refqdfi$Var1 == "v1" & refqdfi$Var3 == "0706"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p10 <- ggplot(refqdfi[which(refqdfi$Var1 == "v1" & refqdfi$Var3 == "0708"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p11 <- ggplot(refqdfi[which(refqdfi$Var1 == "v1" & refqdfi$Var3 == "0722"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+p12 <- ggplot(refqdfi[which(refqdfi$Var1 == "v1" & refqdfi$Var3 == "1104"), ], aes(x="", y=Freq, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + coord_polar("y", start=0) + theme_void() + NoLegend() + scale_fill_manual(values = colpal5)
+```
+
+```{r}
+t0 <- textGrob(" ", gp=gpar(fontfamily="Helvetica"))
+t1 <- textGrob("No CT (Host)", gp=gpar(fontfamily="Helvetica"))
+t2 <- textGrob("Dpp4 CT", gp=gpar(fontfamily="Helvetica"))
+t3 <- textGrob("Cd9 CT", gp=gpar(fontfamily="Helvetica"))
+t4 <- textGrob("Rep 1", gp=gpar(fontfamily="Helvetica"))
+t5 <- textGrob("Rep 2", gp=gpar(fontfamily="Helvetica"))
+t6 <- textGrob("Rep 3", gp=gpar(fontfamily="Helvetica"))
+t7 <- textGrob("Rep 4", gp=gpar(fontfamily="Helvetica"))
+```
+
+
+```{r}
+s3f <- grid.arrange(t0, t4, t5, t6, t7, t1, p1, p2, p3, p4, t2, p5, p6, p7, p8, t3, p9, p10, p11, p12, ncol = 5)
+s3f
+```
+
+## Permutation testing
+
+Permutation testing was performed in Python to test whether louvain clusters are enriched for one CellTagged population or the other. Cluster and CellTag information was used; these data and code for the test are posted on GitHub.
+
+Cells expressing the V1 CellTag were found to be enriched in clusters 1, 4, 5, 10, and 12. Cells expressing the V2 CellTag were found to be enriched in clusters 1, 3, 6, 9, 10, and 12. This information is stored in the P32 Seurat object as `enriched`.
+
+```{r}
+s3g <- DimPlot(p32, cells.highlight = list("Dpp4" = colnames(p32)[which(p32$enriched == "V2")], "Cd9" = colnames(p32)[which(p32$enriched == "V1")], "Both" = colnames(p32)[which(p32$enriched == "Both")]), cols.highlight = c("#232380", "#E75F62", "#1DD3B0")) + theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.line = element_blank(), axis.title = element_blank(), text = element_text(size = 8), plot.margin = margin(0, 0, 0, 0), legend.position = "bottom")
+s3g
+```
+
+```{r}
+celltag_dist_df <- data.frame(table(p32$seurat_clusters, p32$celltag))
+```
+
+```{r}
+celltag_dist_df$percent <- NA
+celltagsums <- table(p32$celltag)
+for(i in 1:dim(celltag_dist_df)[1]) {
+  celltag_dist_df$percent[i] <- celltag_dist_df$Freq[i] / table(p32$celltag)[celltag_dist_df$Var2[i]]
+}
+```
+
+```{r}
+celltag_dist_df$Var1 <- factor(celltag_dist_df$Var1, levels = c(3, 6, 9, 1, 10, 12, 4, 5, 0, 2, 7, 8, 11, 13))
+```
+
+```{r}
+s3h <- ggplot(celltag_dist_df[which(celltag_dist_df$Var2 != "none"), ], aes(x = Var1, y = percent, fill = Var2)) + geom_bar(stat = "identity", position = position_dodge(), color = "black") + theme_classic() + labs(fill = "CellTag", y = "Fraction", x = "Cluster") + scale_fill_manual(values =  colpal2_pink_blue, labels = c("Cd9", "Dpp4")) + theme(legend.position = "none")
+s3h
+```
+
+## Jaccard analysis associating cell type and louvain cluster
+
+```{r}
+p32$cp_ip <- ifelse(p32$capy_new_class_short == "Comm preadip", "comm_preadip", ifelse(p32$capy_new_class_short == "Prog", "prog", NA))
+jacc <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip))
+```
+
+```{r}
+numip <- table(p32$capy_new_class_short)["Prog"]
+numcp <- table(p32$capy_new_class_short)["Comm preadip"] 
+numna <- sum(table(p32$capy_new_class_short)) - table(p32$capy_new_class_short)["Prog"] - table(p32$capy_new_class_short)["Comm preadip"] 
+p32$cp_ip_random <- sample(c(rep("prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
+jacc_rand <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip_random))
+jacc_rand$rep <- 1
+jacc_rand$cluster <- 0:13
+```
+
+```{r}
+for(i in 2:1000) {
+  p32$cp_ip_random <- sample(c(rep("prog", numip), rep("comm_preadip", numcp), rep(NA, numna)))
+  jacc_rand_intermed <- data.frame(PairWiseJaccardSets(p32$seurat_clusters, p32$cp_ip_random))
+  jacc_rand_intermed$rep <- i
+  jacc_rand_intermed$cluster <- 0:13
+  jacc_rand <- rbind(jacc_rand, jacc_rand_intermed)
+}
+```
+
+```{r}
+mzscores <- c()
+for(i in 1:14) {
+  mzip <- 0.6745 * (jacc$int_prog[i] - median(jacc_rand$int_prog[jacc_rand$cluster == i - 1])) / mad(jacc_rand$int_prog[jacc_rand$cluster == i - 1])
+  mzcp <- 0.6745 * (jacc$comm_preadip[i] - median(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])) / mad(jacc_rand$comm_preadip[jacc_rand$cluster == i - 1])
+  mzscores <- c(mzscores, mzip, mzcp)
+}
+```
+
+```{r}
+zdf <- data.frame(mzscore = mzscores, cell_type = rep(c("int_prog", "comm_preadip"), 14), cluster = c(0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13))
+```
+
+```{r}
+s3i <- ggplot(zdf, aes(x = cluster, y = cell_type, fill = mzscore)) + 
+  geom_tile(color = "white",
+            lwd = 0.5,
+            linetype = 1) + geom_text(aes(label = round(mzscore))) + theme_classic() + theme(axis.line = element_blank(), legend.position = "bottom", text = element_text(size = 8)) +
+  scale_y_discrete("Cell type") +
+  scale_x_continuous("Cluster", labels = as.character(seq(0,13)), breaks = seq(0,13)) +
+  #scale_x_discrete("Cluster") + coord_fixed() +
+  scale_fill_gradient2(
+        low = "#053061", mid = "#F7F7F7", high = "#67001F", midpoint = 0)
+s3i
+```
+
+## Cebpadn control experiment
+
+```{r}
+ctcapy <- data.frame(table(p32$celltag, p32$capy_new_class_short))
+ctcapy$dataset <- "original"
+ctcapy$Var3 <- "original"
+```
+
+```{r}
+ctcapy2 <- data.frame(table(ncebpa$celltag_v1v2, ncebpa$capy_short, ncebpa$dataset))
+ctcapy2$dataset <- "control"
+```
+
+```{r}
+ctcapy <- rbind(ctcapy, ctcapy2)
+```
+
+```{r}
+ctcapy$percent <- NA
+for(i in 1:nrow(ctcapy)) {
+  ctcapy$percent[i] <- ctcapy$Freq[i] / sum(ctcapy$Freq[ctcapy$dataset == ctcapy$dataset[i] & ctcapy$Var1 == ctcapy$Var1[i]])
+}
+```
+
+```{r}
+ctcapy$FC2 <- NA
+for(i in 1:nrow(ctcapy)) {
+  ctcapy$FC2[i] <- (ctcapy$percent[i] / ctcapy$percent[which(ctcapy$Var1 == ctcapy$Var1[i] & ctcapy$Var2 == ctcapy$Var2[i] & ctcapy$dataset == "original")])
+}
+```
+
+```{r}
+ctcapy$fc_control_norm <- NA
+for(i in 1:nrow(ctcapy)) {
+  ctcapy$fc_control_norm[i] <- ctcapy$FC2[i] / ctcapy$FC2[ctcapy$Var1 == "none" & ctcapy$Var2 == ctcapy$Var2[i] & ctcapy$dataset == ctcapy$dataset[i] & ctcapy$Var3 == ctcapy$Var3[i]]
+}
+```
+
+```{r}
+ctcapy_control_sum <- data_summary(ctcapy[which(ctcapy$dataset == "control" & ctcapy$Var2 != "Unknown"), ], varname="fc_control_norm", groupnames=c("Var1", "Var2"))
+```
+
+```{r}
+ctcapy_control_sum$Var1_p <- ctcapy_control_sum$Var1
+ctcapy_control_sum$Var1_p <- gsub("v2", "Progenitor (n = 679)", ctcapy_control_sum$Var1_p)
+ctcapy_control_sum$Var1_p <- gsub("v1", "Preadipocyte (n = 923)", ctcapy_control_sum$Var1_p)
+ctcapy_control_sum$Var1_p <- gsub("none", "Host (n = 17,420)", ctcapy_control_sum$Var1_p)
+ctcapy_control_sum$Var1_p <- factor(ctcapy_control_sum$Var1_p, levels = c("Progenitor (n = 679)", "Preadipocyte (n = 923)", "Host (n = 17,420)"))
+```
+
+
+```{r}
+s3j <- ggplot(ctcapy_control_sum, aes(x = Var1_p, group = Var2, fill = Var2, y = mean)) + geom_hline(aes(yintercept = 1), linetype = "dashed") + geom_bar(stat="identity", color="black", width = 0.75, position = position_dodge(width = 0.9)) + geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width=.2, position=position_dodge(.9)) + theme_classic() + theme(legend.position = "none") + xlab("CellTagged populations") + ylab("Scaled proportional fold change relative to corresponding\nabundance of cell type when Cebpa-dn is used") + scale_fill_manual(values = colpal6)
+s3j
+```
+
+```{r}
+# test Cebpa+ against Cebpa- for Cd9-CellTagged (v1)
+randomization_test(df_test, "celltype", c("pos", "neg"), "cebpadn", "v1", "celltag", 10000)
+```
+
+```{r}
+# test Cebpa+ against Cebpa- for Dpp4-CellTagged (v2)
+randomization_test(df_test, "celltype", c("pos", "neg"), "cebpadn", "v2", "celltag", 10000)
+```
+
+```{r}
+# test Cebpa+ against Cebpa- for host (none)
+randomization_test(df_test, "celltype", c("pos", "neg"), "cebpadn", "none", "celltag", 10000)
+```
+
+```{r}
+#ctcapy <- data.frame(table(adi_merged$celltag, adi_merged$capy_new_class_short))
+p2el <- ggplot(adi_sum[adi_sum$celltag == "v2", ], aes(x="", y=rel_abundance, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells\n(Cebpa DN +)") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p2er <- ggplot(adi_sum[adi_sum$celltag == "v1", ], aes(x="", y=rel_abundance, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Cd9 CellTagged cells\n(Cebpa DN +)") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+#ctcapy <- data.frame(table(adi_merged$celltag, adi_merged$capy_new_class_short))
+p2eh <- ggplot(adi_sum[adi_sum$celltag == "none", ], aes(x="", y=rel_abundance, fill=celltype)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Host cells\n(Cebpa DN +)") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+```
+
+```{r}
+ncebpa$capy_short <- ncebpa$capy
+ncebpa$capy_short <- gsub("transitioning_interstitial_progenitor", "Trans prog", ncebpa$capy_short)
+ncebpa$capy_short <- gsub("interstitial_progenitor", "Prog", ncebpa$capy_short)
+ncebpa$capy_short <- gsub("immature_preadipocyte", "Imm preadip", ncebpa$capy_short)
+ncebpa$capy_short <- gsub("committed_preadipocyte", "Comm preadip", ncebpa$capy_short)
+ncebpa$capy_short <- gsub("Multi_ID", "Multi ID", ncebpa$capy_short)
+```
+
+```{r}
+ncebpa$capy_short <- factor(ncebpa$capy_short, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown"))
+```
+
+```{r}
+ctcapy <- data.frame(table(ncebpa$celltag_v1v2, ncebpa$capy_short, ncebpa$dataset))
+```
+
+```{r}
+ctcapy$rel_abundance <- NA
+for(i in 1:nrow(ctcapy)) {
+  ctcapy$rel_abundance[i] <- ctcapy$Freq[i] / sum(ctcapy$Freq[which(ctcapy$Var1 == ctcapy$Var1[i] & ctcapy$Var3 == ctcapy$Var3[i])])
+}
+```
+
+```{r}
+ctcapy_sum <- data_summary(ctcapy[which(ctcapy$Var2 != "Unknown"), ], varname="rel_abundance", groupnames=c("Var2", "Var1"))
+```
+
+```{r}
+ctcapy_sum$Var2 <- factor(ctcapy_sum$Var2, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID"))
+```
+
+```{r}
+p2ela <- ggplot(ctcapy_sum[ctcapy$Var1 == "v2", ], aes(x="", y=rel_abundance, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Dpp4 CellTagged cells\n(Cebpa DN -)") + theme(legend.position="none", text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+p2era <- ggplot(ctcapy_sum[ctcapy_sum$Var1 == "v1", ], aes(x="", y=rel_abundance, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Cd9 CellTagged cells\n(Cebpa DN -)") + scale_fill_manual(name = "Cell type", values = colpal6) + theme(text = element_text(size = 8), legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+#ctcapy <- data.frame(table(ncebpa$celltag_v1v2, ncebpa$capy_short))
+p2eha <- ggplot(ctcapy_sum[ctcapy_sum$Var1 == "none", ], aes(x="", y=rel_abundance, fill=Var2)) + geom_bar(stat="identity", width=1, color="white") + theme_void() + ggtitle("Host cells\n(Cebpa DN -)") + theme(text = element_text(size = 8), plot.title = element_text(hjust = 0.5)) + labs(fill = "Cell type") + scale_fill_manual(name = "Cell type", values = colpal6)
+```
+
+```{r}
+p2ec <- grid.arrange(p2el, p2ela, p2er, p2era, p2eh, p2eha, nrow = 1)
+p2ec
+```
+
+We have deposited our whole processed P32 dataset on Figshare. It has been analyzed according to the code in this notebook. 
+https://figshare.com/s/b75e3e90389bf38c5524
+
+
+
+

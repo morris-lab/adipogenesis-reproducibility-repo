@@ -14,6 +14,7 @@ library(Seurat)
 library(ggplot2)
 library(scclusteval)
 library(grid)
+library(gridExtra)
 ```
 
 
@@ -174,7 +175,7 @@ p32$celltag_origin[which(p32@assays$RNA@counts["GFP.CDS", ] > 0 & p32$celltag ==
 #### Remove transplant cells, re-cluster, and compare clusters to original host-transplant co-embedding
 
 ```{r}
-p32 <- FindNeighbors(p32, return.neighbor = T)
+p32 <- FindNeighbors(p32, return.neighbor = T, k.param = 21)
 ```
 
 ```{r}
@@ -198,7 +199,7 @@ p32_sub <- RunPCA(p32_sub)
 p32_sub <- RunUMAP(p32_sub, dims = 1:10)
 p32_sub <- FindNeighbors(p32_sub)
 p32_sub <- FindClusters(p32_sub)
-p32_sub <- FindNeighbors(p32_sub, return.neighbor = T)
+p32_sub <- FindNeighbors(p32_sub, return.neighbor = T, k.param = 21)
 ```
 
 ```{r}
@@ -210,11 +211,11 @@ DimPlot(p32_sub, label = TRUE, label.size = 7) + NoLegend()
 ```
 
 ```{r}
-p32_sub2 <- FindNeighbors(p32_sub2, reduction = "umap", dims = 1:2, k.param = 20, return.neighbor = TRUE)
+p32_sub2 <- FindNeighbors(p32_sub2, reduction = "umap", dims = 1:2, k.param = 21, return.neighbor = TRUE)
 ```
 
 ```{r}
-nndistdf <- data.frame(p32_sub2@neighbors$integrated.nn@nn.dist, row.names = p32_sub2@neighbors$integrated.nn@cell.names)
+nndistdf <- data.frame(p32_sub2@neighbors$integrated.nn@nn.dist[, 2:21], row.names = p32_sub2@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
@@ -224,7 +225,7 @@ nndistdf_mean <- apply(nndistdf, 1, mean)
 #### Now find distances and calculate mean for reclustered host data with same cells
 
 ```{r}
-nncells_orig <- data.frame(p32_sub2@neighbors$integrated.nn@nn.idx, row.names = p32_sub2@neighbors$integrated.nn@cell.names)
+nncells_orig <- data.frame(p32_sub2@neighbors$integrated.nn@nn.idx[, 2:21], row.names = p32_sub2@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
@@ -304,7 +305,7 @@ nndistdf_random_in_clust_mean <- apply(nndistdf_random_in_clust, 1, mean)
 ```
 
 ```{r}
-nndistdf2_own <- data.frame(p32_sub@neighbors$integrated.nn@nn.dist, row.names = p32_sub@neighbors$integrated.nn@cell.names)
+nndistdf2_own <- data.frame(p32_sub@neighbors$integrated.nn@nn.dist[, 2:21], row.names = p32_sub@neighbors$integrated.nn@cell.names)
 ```
 
 ```{r}
@@ -323,6 +324,7 @@ dists$embedding <- factor(dists$embedding, levels = c("Original", "Reclustered",
 ```{r}
 s5c <- ggplot(dists, aes(x = gsub("_", " ", embedding), y = distance)) + geom_boxplot() + theme_classic() + labs(x = "Embedding", y = "Distance")
 s5c
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/recluster_boxplot.pdf", s5c, height = 2, width = 3, units = "in", dpi = 300)
 ```
 
 ### Louvain cluster
@@ -330,6 +332,7 @@ s5c
 ```{r}
 s5d <- SilhouetteRainCloudPlot(CalculateSilhouette(adi_merged))
 s5d
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/sillhouette.pdf", s5d, height = 2, width = 3, units = "in", dpi = 300)
 ```
 
 
@@ -377,7 +380,20 @@ t7 <- textGrob("Rep 4", gp=gpar(fontfamily="Helvetica"))
 ```{r}
 s5e <- grid.arrange(t0, t4, t5, t6, t7, t1, p1, p2, p3, p4, t2, p5, p6, p7, p8, t3, p9, p10, p11, p12, ncol = 5)
 s5e
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/biological_replicates_p32.pdf", s5e, height = 2, width = 3, units = "in", dpi = 300)
 ```
+
+```{r}
+j1 <- reshape2::melt(PairWiseJaccardSets(p32$seurat_clusters, p32$dataset))
+j2 <- reshape2::melt(PairWiseJaccardSets(p32$capy_new_class_short, p32$dataset))
+s5h <- ggplot(j1, aes(x = factor(Var1), y = factor(Var2, levels = c("1104", "722", "708", "706")), fill = value)) + geom_tile(color = "white", lwd = 0.5, linetype = 1) + theme_classic() + theme(axis.line = element_blank(), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + coord_fixed() + scale_fill_gradientn(colours = c("white", "darkred"), limits = c(0, 1)) + xlab("Louvain cluster") + ylab("Biological replicate") + theme(legend.position = "none")
+s5i <- ggplot(j2, aes(x = factor(Var1, levels = c("Prog", "Trans prog", "Imm preadip", "Comm preadip", "Multi ID", "Unknown")), y = factor(Var2, levels = c("1104", "722", "708", "706")), fill = value)) + geom_tile(color = "white", lwd = 0.5, linetype = 1) + theme_classic() + theme(axis.line = element_blank(), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + coord_fixed() + scale_fill_gradientn(colours = c("white", "darkred"), limits = c(0, 1)) + xlab("Cell type") + ylab("Biological replicate") + theme(legend.position = "none")
+s5h
+s5i
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/jaccard_biol_rep_clusters.pdf", s5h, height = 2, width = 3, units = "in", dpi = 300)
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/jaccard_biol_rep_celltype.pdf", s5i, height = 2, width = 3, units = "in", dpi = 300)
+```
+
 
 #### Jaccard analysis associating replicate with louvain cluster or cell type
 
@@ -599,8 +615,30 @@ https://figshare.com/s/b75e3e90389bf38c5524
 
 
 
+## 2/3/24 plots
 
+```{r}
+s5a <- FeaturePlot(adi_merged, features = "Cebpa", order = T) + NoLegend() + theme(line = element_blank(),
+                                                                axis.title = element_blank(),
+                                                                axis.text = element_blank(),
+                                                                plot.title = element_blank(),
+                                                                plot.margin = margin(0, 0, 0, 0))
+s5a
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/cebpa_p32.pdf", s5a, height = 1, width = 1.5, units = "in", dpi = 300)
+```
 
+```{r}
+s5l <- VlnPlot(p32, features = "Dpp4", sort = TRUE, pt.size = 0) + NoLegend()
+s5m <- VlnPlot(p32, features = "Cd9", sort = TRUE, pt.size = 0) + NoLegend()
+s5l
+s5m
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/dpp4_violin_p32.pdf", s5l, height = 2, width = 3, units = "in", dpi = 300)
+ggsave("~/OneDrive/MorrisLab/Guillermo_project/manuscript/plots/updated_figs/cd9_violin_p32.pdf", s5m, height = 2, width = 3, units = "in", dpi = 300)
+```
+
+```{r}
+
+```
 
 
 
